@@ -15,7 +15,7 @@ import (
 
 func main() {
 	// Start the server in background
-	serverCmd := exec.Command("./bin/seville", "-debug")
+	serverCmd := exec.Command("./bin/ottavia", "-debug")
 	serverCmd.Stdout = os.Stdout
 	serverCmd.Stderr = os.Stderr
 	if err := serverCmd.Start(); err != nil {

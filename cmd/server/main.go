@@ -17,14 +17,14 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"github.com/ottavia-music/seville/internal/analyzer"
-	"github.com/ottavia-music/seville/internal/config"
-	"github.com/ottavia-music/seville/internal/database"
-	"github.com/ottavia-music/seville/internal/handlers"
-	"github.com/ottavia-music/seville/internal/jobs"
-	"github.com/ottavia-music/seville/internal/models"
-	"github.com/ottavia-music/seville/internal/scanner"
-	"github.com/ottavia-music/seville/web/templates/pages"
+	"github.com/ottavia-music/ottavia/internal/analyzer"
+	"github.com/ottavia-music/ottavia/internal/config"
+	"github.com/ottavia-music/ottavia/internal/database"
+	"github.com/ottavia-music/ottavia/internal/handlers"
+	"github.com/ottavia-music/ottavia/internal/jobs"
+	"github.com/ottavia-music/ottavia/internal/models"
+	"github.com/ottavia-music/ottavia/internal/scanner"
+	"github.com/ottavia-music/ottavia/web/templates/pages"
 )
 
 var (
@@ -50,7 +50,7 @@ func main() {
 	log.Info().
 		Str("version", version).
 		Str("build_time", buildTime).
-		Msg("Starting Seville - Music Quality Lab")
+		Msg("Starting Ottavia - Music Quality Lab")
 
 	// Load config
 	cfg, err := config.Load(*configPath)

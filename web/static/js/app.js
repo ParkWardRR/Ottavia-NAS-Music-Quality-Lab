@@ -1,4 +1,4 @@
-// Seville - Music Quality Lab
+// Ottavia - Music Quality Lab
 // Main application JavaScript
 
 // Alpine.js store for global state

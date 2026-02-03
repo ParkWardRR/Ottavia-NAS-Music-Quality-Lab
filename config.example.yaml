@@ -1,4 +1,4 @@
-# Seville - Music Quality Lab
+# Ottavia - Music Quality Lab
 # Example configuration file
 
 # Server settings
@@ -15,7 +15,7 @@ database:
   # Database connection string
   # For SQLite: path to database file
   # For PostgreSQL: postgres://user:password@host:port/database?sslmode=disable
-  dsn: "./seville.db"
+  dsn: "./ottavia.db"
 
 # Scanner settings
 scanner:

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="web/static/img/logo.svg" alt="Seville Logo" width="120" height="120">
+  <img src="web/static/img/logo.svg" alt="Ottavia Logo" width="120" height="120">
 </p>
 
-<h1 align="center">Seville</h1>
+<h1 align="center">Ottavia</h1>
 <h3 align="center">Music Quality Lab</h3>
 
 <p align="center">
@@ -136,7 +136,7 @@
 ```bash
 # Clone the repository
 git clone https://github.com/ParkWardRR/Ottavia-NAS-Music-Quality-Lab.git
-cd seville
+cd ottavia
 
 # Install dependencies and build
 make deps
@@ -158,7 +158,7 @@ go install github.com/ParkWardRR/Ottavia-NAS-Music-Quality-Lab/cmd/server@latest
 
 ```bash
 docker pull ghcr.io/ParkWardRR/Ottavia-NAS-Music-Quality-Lab:latest
-docker run -p 8080:8080 -v /path/to/music:/music -v seville-data:/data ghcr.io/ParkWardRR/Ottavia-NAS-Music-Quality-Lab
+docker run -p 8080:8080 -v /path/to/music:/music -v ottavia-data:/data ghcr.io/ParkWardRR/Ottavia-NAS-Music-Quality-Lab
 ```
 
 ### From Source
@@ -192,7 +192,7 @@ server:
 
 database:
   driver: "sqlite3"
-  dsn: "./seville.db"
+  dsn: "./ottavia.db"
 
 scanner:
   default_interval: "15m"
@@ -215,7 +215,7 @@ ffmpeg:
 |----------|-------------|---------|
 | `SEVILLE_CONFIG` | Config file path | `./config.yaml` |
 | `SEVILLE_PORT` | Server port | `8080` |
-| `SEVILLE_DB_DSN` | Database DSN | `./seville.db` |
+| `SEVILLE_DB_DSN` | Database DSN | `./ottavia.db` |
 | `SEVILLE_DEBUG` | Enable debug mode | `false` |
 
 ---
@@ -339,7 +339,7 @@ make screenshots
 ### Project Structure
 
 ```
-seville/
+ottavia/
 ├── cmd/
 │   └── server/          # Main application entry
 ├── internal/

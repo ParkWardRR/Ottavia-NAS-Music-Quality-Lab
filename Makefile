@@ -1,10 +1,10 @@
-# Seville - Music Quality Lab
+# Ottavia - Music Quality Lab
 # Build and development commands
 
 .PHONY: all build run dev test clean templ css install deps screenshots help
 
 # Variables
-BINARY_NAME=seville
+BINARY_NAME=ottavia
 BUILD_DIR=bin
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
@@ -98,11 +98,11 @@ fmt:
 # Docker build
 docker-build:
 	@echo "Building Docker image..."
-	docker build -t seville:$(VERSION) .
+	docker build -t ottavia:$(VERSION) .
 
 # Docker run
 docker-run:
-	docker run -p 8080:8080 -v $(PWD)/data:/data seville:$(VERSION)
+	docker run -p 8080:8080 -v $(PWD)/data:/data ottavia:$(VERSION)
 
 # Install for production
 install: all
@@ -111,7 +111,7 @@ install: all
 
 # Help
 help:
-	@echo "Seville - Music Quality Lab"
+	@echo "Ottavia - Music Quality Lab"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make [target]"

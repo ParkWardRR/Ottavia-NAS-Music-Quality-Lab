@@ -1,4 +1,4 @@
-# Seville - Music Quality Lab
+# Ottavia - Music Quality Lab
 # Multi-stage build for minimal image size
 
 # Build stage
@@ -30,7 +30,7 @@ RUN templ generate
 RUN npm run css:build
 
 # Build binary
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o seville ./cmd/server
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o ottavia ./cmd/server
 
 # Runtime stage
 FROM alpine:3.19
@@ -43,25 +43,25 @@ RUN apk add --no-cache \
     sqlite
 
 # Create non-root user
-RUN addgroup -g 1000 seville && \
-    adduser -u 1000 -G seville -h /app -D seville
+RUN addgroup -g 1000 ottavia && \
+    adduser -u 1000 -G ottavia -h /app -D ottavia
 
 WORKDIR /app
 
 # Copy binary and static files
-COPY --from=builder /app/seville .
+COPY --from=builder /app/ottavia .
 COPY --from=builder /app/web/static ./web/static
 
 # Create data directories
 RUN mkdir -p /data/artifacts /data/temp && \
-    chown -R seville:seville /app /data
+    chown -R ottavia:ottavia /app /data
 
 # Switch to non-root user
-USER seville
+USER ottavia
 
 # Environment
 ENV SEVILLE_PORT=8080 \
-    SEVILLE_DB_DSN=/data/seville.db \
+    SEVILLE_DB_DSN=/data/ottavia.db \
     SEVILLE_ARTIFACTS_PATH=/data/artifacts \
     SEVILLE_TEMP_PATH=/data/temp
 
@@ -73,4 +73,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget -qO- http://localhost:8080/api/health || exit 1
 
 # Run
-ENTRYPOINT ["./seville"]
+ENTRYPOINT ["./ottavia"]

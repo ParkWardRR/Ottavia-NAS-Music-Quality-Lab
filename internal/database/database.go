@@ -12,7 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/ottavia-music/seville/internal/models"
+	"github.com/ottavia-music/ottavia/internal/models"
 )
 
 //go:embed migrations/*.sql
@@ -616,14 +616,20 @@ func (db *DB) GetConversionProfile(ctx context.Context, id string) (*models.Conv
 
 // Album represents a grouped album with version information
 type Album struct {
-	Name        string `db:"album_name" json:"name"`
-	Artist      string `db:"album_artist" json:"artist"`
-	Year        int    `db:"year" json:"year"`
-	TrackCount  int    `db:"track_count" json:"trackCount"`
-	VersionCount int   `db:"version_count" json:"versionCount"`
-	Codecs      string `db:"codecs" json:"codecs"`
-	TotalSize   int64  `db:"total_size" json:"totalSize"`
-	HasIssues   bool   `db:"has_issues" json:"hasIssues"`
+	Name         string `db:"album_name" json:"name"`
+	Artist       string `db:"album_artist" json:"artist"`
+	Year         int    `db:"year" json:"year"`
+	TrackCount   int    `db:"track_count" json:"trackCount"`
+	VersionCount int    `db:"version_count" json:"versionCount"`
+	Codecs       string `db:"codecs" json:"codecs"`
+	TotalSize    int64  `db:"total_size" json:"totalSize"`
+	HasIssues    bool   `db:"has_issues" json:"hasIssues"`
+	ArtworkPath  string `db:"artwork_path" json:"artworkPath,omitempty"`
+	AvgDR        int    `db:"avg_dr" json:"avgDR,omitempty"`        // Dynamic Range score
+	IsLossless   bool   `db:"is_lossless" json:"isLossless"`
+	IsSuspect    bool   `db:"is_suspect" json:"isSuspect"`          // Possible lossy transcode
+	MaxBitDepth  int    `db:"max_bit_depth" json:"maxBitDepth"`
+	MaxSampleRate int   `db:"max_sample_rate" json:"maxSampleRate"`
 }
 
 // AlbumVersion represents a specific version of an album (different path/quality)
@@ -649,7 +655,7 @@ func (db *DB) ListAlbums(ctx context.Context, limit, offset int) ([]Album, int, 
 		return nil, 0, err
 	}
 
-	// Get albums grouped
+	// Get albums grouped with quality info
 	var albums []Album
 	err = db.SelectContext(ctx, &albums, `
 		SELECT
@@ -660,7 +666,13 @@ func (db *DB) ListAlbums(ctx context.Context, limit, offset int) ([]Album, int, 
 			COUNT(DISTINCT SUBSTR(m.path, 1, LENGTH(m.path) - LENGTH(m.filename) - 1)) as version_count,
 			GROUP_CONCAT(DISTINCT t.codec) as codecs,
 			SUM(m.size) as total_size,
-			CASE WHEN COUNT(ar.id) > 0 AND SUM(CASE WHEN ar.lossless_status != 'pass' THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END as has_issues
+			CASE WHEN COUNT(ar.id) > 0 AND SUM(CASE WHEN ar.lossless_status != 'pass' THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END as has_issues,
+			COALESCE((SELECT a.path FROM artifacts a WHERE a.track_id = (SELECT id FROM tracks WHERE album = t.album LIMIT 1) AND a.type = 'artwork' LIMIT 1), '') as artwork_path,
+			COALESCE(AVG(ar.loudness_range + ar.crest_factor/2), 0) as avg_dr,
+			CASE WHEN MAX(t.codec) IN ('flac', 'alac', 'wav', 'aiff') THEN 1 ELSE 0 END as is_lossless,
+			CASE WHEN SUM(CASE WHEN ar.lossless_status = 'warn' OR ar.lossless_status = 'fail' THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END as is_suspect,
+			MAX(t.bit_depth) as max_bit_depth,
+			MAX(t.sample_rate) as max_sample_rate
 		FROM tracks t
 		JOIN media_files m ON t.media_file_id = m.id
 		LEFT JOIN analysis_results ar ON ar.track_id = t.id
@@ -671,6 +683,22 @@ func (db *DB) ListAlbums(ctx context.Context, limit, offset int) ([]Album, int, 
 	`, limit, offset)
 
 	return albums, total, err
+}
+
+// GetAlbumArtwork returns the artwork path for a specific album
+func (db *DB) GetAlbumArtwork(ctx context.Context, albumName string) (string, error) {
+	var path string
+	err := db.GetContext(ctx, &path, `
+		SELECT a.path
+		FROM artifacts a
+		JOIN tracks t ON a.track_id = t.id
+		WHERE t.album = ? AND a.type = 'artwork'
+		LIMIT 1
+	`, albumName)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func (db *DB) GetAlbumVersions(ctx context.Context, albumName, artistName string) ([]AlbumVersion, error) {

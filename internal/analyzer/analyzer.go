@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
-	"github.com/ottavia-music/seville/internal/database"
-	"github.com/ottavia-music/seville/internal/models"
+	"github.com/ottavia-music/ottavia/internal/database"
+	"github.com/ottavia-music/ottavia/internal/models"
 )
 
 type Analyzer struct {
@@ -319,6 +319,49 @@ func (a *Analyzer) checkArtwork(track *models.Track, probe *ProbeResult) {
 	}
 }
 
+// ExtractAlbumArt extracts embedded artwork from an audio file
+func (a *Analyzer) ExtractAlbumArt(ctx context.Context, mediaFilePath, trackID string) (string, error) {
+	outputDir := filepath.Join(a.artifactsPath, trackID[:2], trackID)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", err
+	}
+
+	outputPath := filepath.Join(outputDir, "artwork.jpg")
+
+	args := []string{
+		"-i", mediaFilePath,
+		"-an",
+		"-vcodec", "copy",
+		"-y",
+		outputPath,
+	}
+
+	cmd := exec.CommandContext(ctx, a.ffmpegPath, args...)
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("artwork extraction failed: %w", err)
+	}
+
+	// Verify file exists and has content
+	if info, err := os.Stat(outputPath); err != nil || info.Size() == 0 {
+		os.Remove(outputPath)
+		return "", fmt.Errorf("no artwork extracted")
+	}
+
+	artifact := &models.Artifact{
+		ID:       uuid.NewString(),
+		TrackID:  trackID,
+		Type:     "artwork",
+		Path:     outputPath,
+		MimeType: "image/jpeg",
+	}
+
+	if err := a.db.CreateArtifact(ctx, artifact); err != nil {
+		return "", err
+	}
+
+	return outputPath, nil
+}
+
 func (a *Analyzer) analyzeAudio(ctx context.Context, path string, track *models.Track) (*models.AnalysisResult, error) {
 	result := &models.AnalysisResult{
 		Version:        1,
@@ -489,6 +532,67 @@ func (a *Analyzer) detectLossyAncestry(track *models.Track, result *models.Analy
 	}
 
 	return min(suspicion, 1.0)
+}
+
+// CalculateDynamicRange returns a DR score (1-20) and human-readable assessment
+// Higher DR = more dynamic range = less compression = better for audiophiles
+func (a *Analyzer) CalculateDynamicRange(result *models.AnalysisResult) (int, string, string) {
+	// DR is typically calculated as the difference between peak and RMS
+	// Using loudness range (LRA) as a proxy since it's similar in concept
+	dr := int(result.LoudnessRange + result.CrestFactor/2)
+	if dr < 1 {
+		dr = 1
+	}
+	if dr > 20 {
+		dr = 20
+	}
+
+	var rating, explanation string
+	switch {
+	case dr >= 14:
+		rating = "Excellent"
+		explanation = "This track has excellent dynamic range. It breathes naturally with quiet moments and loud moments clearly distinguished. Perfect for critical listening."
+	case dr >= 10:
+		rating = "Good"
+		explanation = "This track has good dynamics. It's well-mastered with reasonable contrast between quiet and loud sections."
+	case dr >= 7:
+		rating = "Moderate"
+		explanation = "This track has moderate dynamics. Some compression was applied during mastering, reducing the difference between quiet and loud parts."
+	case dr >= 4:
+		rating = "Limited"
+		explanation = "This track has limited dynamic range - a casualty of the 'loudness wars'. The audio is heavily compressed to sound louder, losing musical nuance."
+	default:
+		rating = "Crushed"
+		explanation = "This track is heavily compressed (brickwalled). Almost no difference between quiet and loud sections. Common in modern pop/rock releases."
+	}
+
+	return dr, rating, explanation
+}
+
+// GetLossyExplanation returns user-friendly explanation of lossy detection
+func (a *Analyzer) GetLossyExplanation(result *models.AnalysisResult, track *models.Track) (string, string) {
+	if result.LosslessStatus == models.LosslessPass {
+		return "Authentic Lossless", "This file appears to be genuine lossless audio. The high-frequency content extends naturally to the expected range, indicating it wasn't converted from MP3 or other lossy formats."
+	}
+
+	if result.LosslessStatus == models.LosslessWarn {
+		return "Possibly Transcoded", fmt.Sprintf(
+			"This file claims to be lossless (%s) but shows signs it may have been converted from a lossy source like MP3. "+
+				"High frequencies appear to cut off around %.0f Hz instead of extending to %.0f Hz. "+
+				"While not definitive proof, this pattern is common when lossy files are 'upgraded' to lossless formats.",
+			strings.ToUpper(track.Codec),
+			result.HighFreqCutoff,
+			float64(track.SampleRate)/2,
+		)
+	}
+
+	return "Likely Transcoded", fmt.Sprintf(
+		"Strong evidence this %s file was converted from a lossy source. "+
+			"The audio shows a hard frequency cutoff around %.0f Hz - a telltale sign of MP3/AAC compression. "+
+			"You're storing lossless file sizes but not getting lossless quality. Consider finding a true lossless source.",
+		strings.ToUpper(track.Codec),
+		result.HighFreqCutoff,
+	)
 }
 
 func (a *Analyzer) generateWaveform(ctx context.Context, path, trackID string) error {
