@@ -1,4 +1,4 @@
-# roadmap.md — Music Library Quality Scanner + Cleaner
+# Ottavia — Music Library Quality Scanner + Cleaner
 
 ## Phase 0 — Repo + foundations (1–3 days)
 - [x] Monorepo layout (`/cmd/app`, `/internal`, `/web`, `/migrations`, `/artifacts`)
@@ -6,6 +6,7 @@
 - [x] DB + migrations (Libraries, MediaFiles, ScanRuns, Jobs, Tracks, Results)
 - [x] Configuration system with YAML support
 - [x] Logging with zerolog
+- [x] Branding (Ottavia name, favicon, logo)
 
 ## Phase 1 — Scanner MVP (3–7 days)
 - [x] Library registration UI (root paths, scan interval, read-only flag)
@@ -25,6 +26,9 @@
 - [x] Spectrogram artifact generation (store downsampled matrix)
 - [x] Lossy suspicion model v1 (band-limit + rolloff heuristics, confidence scoring)
 - [x] Per-issue "Show evidence" UI (links issue → chart + explanation)
+- [x] Lossy-to-lossless detection with user-friendly explanations
+- [x] Dynamic Range (DR) scoring for loudness war analysis
+- [x] Album page overhaul with album art, quality badges, and DR scores
 - [ ] Album-level consistency view (spot outliers across an album)
 
 ## Phase 4 — Metadata editor + audit (2–4 weeks)
@@ -45,6 +49,7 @@
 - [x] Docker support
 - [x] Makefile for build automation
 - [x] Hot reload development with Air
+- [x] Nginx reverse proxy configuration (port 80)
 - [ ] Passwordless SSH deploy script (rsync binary/assets, restart systemd, health check)
 - [ ] Backups + retention (DB + artifacts retention policies)
 - [ ] Performance (parallel workers, throttling, NAS-friendly IO patterns)
