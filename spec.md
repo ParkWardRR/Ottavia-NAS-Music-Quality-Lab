@@ -2,6 +2,14 @@
 
 # product name:     Ottavia-NAS-Music-Quality-Lab (feel free to shorten)
 
+Blue Oak Model License
+
+Version 1.0.0
+
+Always update readme and turn the roadmap into a checklist. Check off what you've done. Add suggested intems if missing. 
+
+Use playwright-go for testing and to take mock screenshots. use this for testing locally ~/Desktop/testingMusic i will give you alma linux host info in the next phase of development
+
 ## 1) Product summary
 A self-hosted tool (runs in a VM) that monitors one or more NAS-mounted music folders, scans new/changed audio, verifies “true lossless” vs likely lossy-transcodes, runs a battery of audio-quality tests, audits metadata, and provides per-track interactive charts as evidence. It also provides a web UI to edit metadata and to queue album/track conversion jobs for “iPod-max / Red Book style” targets, executed later inside the app.
 
