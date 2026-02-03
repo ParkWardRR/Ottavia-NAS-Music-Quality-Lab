@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-seville
+ottavia
 bin/
 
 # Build artifacts

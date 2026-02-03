@@ -16,8 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
-	"github.com/ottavia-music/seville/internal/database"
-	"github.com/ottavia-music/seville/internal/models"
+	"github.com/ottavia-music/ottavia/internal/database"
+	"github.com/ottavia-music/ottavia/internal/models"
 )
 
 var supportedExtensions = map[string]bool{

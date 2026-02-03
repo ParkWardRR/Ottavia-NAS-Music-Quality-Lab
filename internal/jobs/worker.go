@@ -8,9 +8,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/ottavia-music/seville/internal/analyzer"
-	"github.com/ottavia-music/seville/internal/database"
-	"github.com/ottavia-music/seville/internal/models"
+	"github.com/ottavia-music/ottavia/internal/analyzer"
+	"github.com/ottavia-music/ottavia/internal/database"
+	"github.com/ottavia-music/ottavia/internal/models"
 )
 
 type Worker struct {

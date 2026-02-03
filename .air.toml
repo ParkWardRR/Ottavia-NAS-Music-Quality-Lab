@@ -1,4 +1,4 @@
-# Seville - Air configuration for hot reload development
+# Ottavia - Air configuration for hot reload development
 
 root = "."
 testdata_dir = "testdata"

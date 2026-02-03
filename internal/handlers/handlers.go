@@ -9,10 +9,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 
-	"github.com/ottavia-music/seville/internal/analyzer"
-	"github.com/ottavia-music/seville/internal/database"
-	"github.com/ottavia-music/seville/internal/models"
-	"github.com/ottavia-music/seville/internal/scanner"
+	"github.com/ottavia-music/ottavia/internal/analyzer"
+	"github.com/ottavia-music/ottavia/internal/database"
+	"github.com/ottavia-music/ottavia/internal/models"
+	"github.com/ottavia-music/ottavia/internal/scanner"
 )
 
 type Handler struct {

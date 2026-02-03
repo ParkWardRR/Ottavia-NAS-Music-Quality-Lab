@@ -1,4 +1,4 @@
-module github.com/ottavia-music/seville
+module github.com/ottavia-music/ottavia
 
 go 1.23.0
 
