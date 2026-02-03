@@ -1,0 +1,307 @@
+package pages
+
+import (
+	"github.com/ottavia-music/seville/web/templates/layouts"
+	"github.com/ottavia-music/seville/internal/models"
+)
+
+templ Settings(settings map[string]string, profiles []models.ConversionProfile) {
+	@layouts.Base("Settings", settings) {
+		<div class="max-w-4xl">
+			<!-- Header -->
+			<div class="mb-8">
+				<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
+				<p class="mt-1 text-gray-500 dark:text-gray-400">Customize your Seville experience</p>
+			</div>
+
+			<div class="space-y-6">
+				<!-- Appearance -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Appearance</h2>
+						<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Customize how Seville looks</p>
+					</div>
+					<div class="p-6 space-y-6">
+						<!-- Theme -->
+						<div class="flex items-center justify-between">
+							<div>
+								<label class="text-sm font-medium text-gray-900 dark:text-white">Theme</label>
+								<p class="text-sm text-gray-500 dark:text-gray-400">Choose your preferred color scheme</p>
+							</div>
+							<div class="flex items-center gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl" x-data="{ theme: 'system' }">
+								<button
+									type="button"
+									class="px-4 py-2 text-sm font-medium rounded-lg transition-all"
+									:class="theme === 'light' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+									@click="theme = 'light'; updateSetting('theme', 'light')"
+								>
+									<svg class="w-4 h-4 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+									</svg>
+									Light
+								</button>
+								<button
+									type="button"
+									class="px-4 py-2 text-sm font-medium rounded-lg transition-all"
+									:class="theme === 'dark' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+									@click="theme = 'dark'; updateSetting('theme', 'dark')"
+								>
+									<svg class="w-4 h-4 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+									</svg>
+									Dark
+								</button>
+								<button
+									type="button"
+									class="px-4 py-2 text-sm font-medium rounded-lg transition-all"
+									:class="theme === 'system' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+									@click="theme = 'system'; updateSetting('theme', 'system')"
+								>
+									<svg class="w-4 h-4 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+									</svg>
+									System
+								</button>
+							</div>
+						</div>
+
+						<!-- Accent Color -->
+						<div class="flex items-center justify-between">
+							<div>
+								<label class="text-sm font-medium text-gray-900 dark:text-white">Accent Color</label>
+								<p class="text-sm text-gray-500 dark:text-gray-400">Choose your accent color</p>
+							</div>
+							<div class="flex items-center gap-2" x-data="{ color: 'blue' }">
+								<button
+									type="button"
+									class="w-8 h-8 rounded-full bg-blue-500 ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 transition-all"
+									:class="color === 'blue' ? 'ring-blue-500' : 'ring-transparent hover:ring-blue-500/50'"
+									@click="color = 'blue'; updateSetting('accent_color', 'blue')"
+								></button>
+								<button
+									type="button"
+									class="w-8 h-8 rounded-full bg-purple-500 ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 transition-all"
+									:class="color === 'purple' ? 'ring-purple-500' : 'ring-transparent hover:ring-purple-500/50'"
+									@click="color = 'purple'; updateSetting('accent_color', 'purple')"
+								></button>
+								<button
+									type="button"
+									class="w-8 h-8 rounded-full bg-pink-500 ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 transition-all"
+									:class="color === 'pink' ? 'ring-pink-500' : 'ring-transparent hover:ring-pink-500/50'"
+									@click="color = 'pink'; updateSetting('accent_color', 'pink')"
+								></button>
+								<button
+									type="button"
+									class="w-8 h-8 rounded-full bg-emerald-500 ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 transition-all"
+									:class="color === 'green' ? 'ring-emerald-500' : 'ring-transparent hover:ring-emerald-500/50'"
+									@click="color = 'green'; updateSetting('accent_color', 'green')"
+								></button>
+								<button
+									type="button"
+									class="w-8 h-8 rounded-full bg-orange-500 ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 transition-all"
+									:class="color === 'orange' ? 'ring-orange-500' : 'ring-transparent hover:ring-orange-500/50'"
+									@click="color = 'orange'; updateSetting('accent_color', 'orange')"
+								></button>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Scanner Settings -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Scanner</h2>
+						<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure scanning behavior</p>
+					</div>
+					<div class="p-6 space-y-6">
+						<!-- Auto Scan -->
+						<div class="flex items-center justify-between">
+							<div>
+								<label class="text-sm font-medium text-gray-900 dark:text-white">Automatic Scanning</label>
+								<p class="text-sm text-gray-500 dark:text-gray-400">Automatically scan libraries at set intervals</p>
+							</div>
+							<label class="relative inline-flex items-center cursor-pointer" x-data="{ enabled: true }">
+								<input
+									type="checkbox"
+									class="sr-only peer"
+									:checked="enabled"
+									@change="enabled = $event.target.checked; updateSetting('auto_scan_enabled', enabled)"
+								/>
+								<div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+							</label>
+						</div>
+
+						<!-- Worker Count -->
+						<div class="flex items-center justify-between">
+							<div>
+								<label class="text-sm font-medium text-gray-900 dark:text-white">Worker Threads</label>
+								<p class="text-sm text-gray-500 dark:text-gray-400">Number of parallel analysis workers</p>
+							</div>
+							<select
+								class="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+								x-data=""
+								@change="updateSetting('worker_count', $event.target.value)"
+							>
+								<option value="1">1 worker</option>
+								<option value="2">2 workers</option>
+								<option value="4" selected>4 workers</option>
+								<option value="8">8 workers</option>
+							</select>
+						</div>
+
+						<!-- Default Scan Interval -->
+						<div class="flex items-center justify-between">
+							<div>
+								<label class="text-sm font-medium text-gray-900 dark:text-white">Default Scan Interval</label>
+								<p class="text-sm text-gray-500 dark:text-gray-400">Default interval for new libraries</p>
+							</div>
+							<select
+								class="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+								@change="updateSetting('scan_interval', $event.target.value)"
+							>
+								<option value="5m">5 minutes</option>
+								<option value="15m" selected>15 minutes</option>
+								<option value="30m">30 minutes</option>
+								<option value="1h">1 hour</option>
+								<option value="6h">6 hours</option>
+								<option value="24h">24 hours</option>
+							</select>
+						</div>
+					</div>
+				</div>
+
+				<!-- Notifications -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h2>
+						<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage notification preferences</p>
+					</div>
+					<div class="p-6 space-y-6">
+						<div class="flex items-center justify-between">
+							<div>
+								<label class="text-sm font-medium text-gray-900 dark:text-white">Enable Notifications</label>
+								<p class="text-sm text-gray-500 dark:text-gray-400">Receive notifications for important events</p>
+							</div>
+							<label class="relative inline-flex items-center cursor-pointer" x-data="{ enabled: true }">
+								<input type="checkbox" class="sr-only peer" :checked="enabled" @change="enabled = $event.target.checked; updateSetting('notifications_enabled', enabled)"/>
+								<div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+							</label>
+						</div>
+
+						<div class="flex items-center justify-between">
+							<div>
+								<label class="text-sm font-medium text-gray-900 dark:text-white">Scan Complete</label>
+								<p class="text-sm text-gray-500 dark:text-gray-400">Notify when library scans complete</p>
+							</div>
+							<label class="relative inline-flex items-center cursor-pointer" x-data="{ enabled: true }">
+								<input type="checkbox" class="sr-only peer" :checked="enabled" @change="enabled = $event.target.checked; updateSetting('notify_scan_complete', enabled)"/>
+								<div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+							</label>
+						</div>
+
+						<div class="flex items-center justify-between">
+							<div>
+								<label class="text-sm font-medium text-gray-900 dark:text-white">Issues Found</label>
+								<p class="text-sm text-gray-500 dark:text-gray-400">Notify when new issues are detected</p>
+							</div>
+							<label class="relative inline-flex items-center cursor-pointer" x-data="{ enabled: true }">
+								<input type="checkbox" class="sr-only peer" :checked="enabled" @change="enabled = $event.target.checked; updateSetting('notify_issues_found', enabled)"/>
+								<div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+							</label>
+						</div>
+					</div>
+				</div>
+
+				<!-- Conversion Profiles -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+						<div>
+							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Conversion Profiles</h2>
+							<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage audio conversion presets</p>
+						</div>
+						<button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors">
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+							</svg>
+							Add Profile
+						</button>
+					</div>
+					<div class="divide-y divide-gray-200/50 dark:divide-gray-800/50">
+						for _, profile := range profiles {
+							<div class="p-6 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+								<div class="flex items-center gap-4">
+									<div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+										<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+										</svg>
+									</div>
+									<div>
+										<h3 class="font-medium text-gray-900 dark:text-white">{ profile.Name }</h3>
+										<p class="text-sm text-gray-500 dark:text-gray-400">{ profile.Description }</p>
+									</div>
+								</div>
+								<div class="flex items-center gap-4">
+									<span class="px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-mono uppercase text-gray-600 dark:text-gray-400">
+										{ profile.Codec }
+									</span>
+									if profile.IsBuiltin {
+										<span class="text-xs text-gray-400">Built-in</span>
+									} else {
+										<button class="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+											</svg>
+										</button>
+									}
+								</div>
+							</div>
+						}
+					</div>
+				</div>
+
+				<!-- About -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">About</h2>
+					</div>
+					<div class="p-6">
+						<div class="flex items-center gap-4">
+							<div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
+								<svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+								</svg>
+							</div>
+							<div>
+								<h3 class="text-xl font-bold text-gray-900 dark:text-white">Seville</h3>
+								<p class="text-gray-500 dark:text-gray-400">Music Quality Lab</p>
+								<p class="text-sm text-gray-400 dark:text-gray-500 mt-1">Version 1.0.0</p>
+							</div>
+						</div>
+						<p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+							A self-hosted tool for monitoring music libraries, verifying lossless audio, auditing metadata, and managing conversions.
+						</p>
+						<p class="mt-2 text-sm text-gray-400 dark:text-gray-500">
+							Licensed under Blue Oak Model License 1.0.0
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+		function updateSetting(key, value) {
+			fetch('/api/settings', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ [key]: value })
+			}).then(response => {
+				if (response.ok) {
+					if (key === 'theme') {
+						document.documentElement.classList.toggle('dark', value === 'dark');
+					}
+				}
+			});
+		}
+		</script>
+	}
+}

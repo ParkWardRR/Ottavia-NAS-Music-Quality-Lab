@@ -1,0 +1,440 @@
+package pages
+
+import (
+	"database/sql"
+	"fmt"
+	"github.com/ottavia-music/seville/web/templates/layouts"
+	"github.com/ottavia-music/seville/web/templates/components"
+	"github.com/ottavia-music/seville/internal/models"
+)
+
+templ TracksPage(tracks []models.Track, total int, filter string, settings map[string]string) {
+	@layouts.Base("Tracks", settings) {
+		<!-- Header -->
+		<div class="mb-8">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Tracks</h1>
+					<p class="mt-1 text-gray-500 dark:text-gray-400">{ fmt.Sprintf("%d tracks in your library", total) }</p>
+				</div>
+				<div class="flex items-center gap-4">
+					<!-- Search -->
+					<div class="relative">
+						<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+						</svg>
+						<input
+							type="search"
+							placeholder="Search tracks..."
+							class="w-64 pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+						/>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Filters -->
+		<div class="flex items-center gap-2 mb-6">
+			<a
+				href="/tracks"
+				class={ fmt.Sprintf("px-4 py-2 rounded-xl text-sm font-medium transition-colors %s", getFilterClass(filter, "")) }
+			>
+				All Tracks
+			</a>
+			<a
+				href="/tracks?filter=issues"
+				class={ fmt.Sprintf("px-4 py-2 rounded-xl text-sm font-medium transition-colors %s", getFilterClass(filter, "issues")) }
+			>
+				<svg class="w-4 h-4 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+				</svg>
+				With Issues
+			</a>
+			<a
+				href="/tracks?filter=untagged"
+				class={ fmt.Sprintf("px-4 py-2 rounded-xl text-sm font-medium transition-colors %s", getFilterClass(filter, "untagged")) }
+			>
+				<svg class="w-4 h-4 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+				</svg>
+				Missing Tags
+			</a>
+			<a
+				href="/tracks?filter=lossy"
+				class={ fmt.Sprintf("px-4 py-2 rounded-xl text-sm font-medium transition-colors %s", getFilterClass(filter, "lossy")) }
+			>
+				<svg class="w-4 h-4 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+				</svg>
+				Likely Lossy
+			</a>
+		</div>
+
+		<!-- Tracks Table -->
+		<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+			if len(tracks) == 0 {
+				<div class="p-12 text-center">
+					<div class="w-16 h-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+						<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+						</svg>
+					</div>
+					<h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No tracks found</h3>
+					<p class="text-gray-500 dark:text-gray-400">
+						if filter != "" {
+							No tracks match the current filter
+						} else {
+							Add a library and run a scan to see your tracks
+						}
+					</p>
+				</div>
+			} else {
+				<div class="overflow-x-auto">
+					<table class="w-full">
+						<thead>
+							<tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200/50 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-800/30">
+								<th class="px-6 py-4">Track</th>
+								<th class="px-6 py-4">Album</th>
+								<th class="px-6 py-4">Format</th>
+								<th class="px-6 py-4">Duration</th>
+								<th class="px-6 py-4">Quality</th>
+								<th class="px-6 py-4"></th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-gray-200/50 dark:divide-gray-800/50">
+							for _, track := range tracks {
+								@components.TrackRow(track, nil)
+							}
+						</tbody>
+					</table>
+				</div>
+
+				<!-- Pagination -->
+				<div class="px-6 py-4 border-t border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+					<p class="text-sm text-gray-500 dark:text-gray-400">
+						Showing { fmt.Sprintf("%d", len(tracks)) } of { fmt.Sprintf("%d", total) } tracks
+					</p>
+					<div class="flex items-center gap-2">
+						<button class="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled>
+							Previous
+						</button>
+						<button class="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+							Next
+						</button>
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifacts []models.Artifact, settings map[string]string) {
+	@layouts.Base(getTrackTitle(track), settings) {
+		<!-- Breadcrumb -->
+		<nav class="flex items-center gap-2 text-sm mb-6">
+			<a href="/tracks" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">Tracks</a>
+			<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+			</svg>
+			<span class="text-gray-900 dark:text-white font-medium">{ getTrackTitle(track) }</span>
+		</nav>
+
+		<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+			<!-- Main Content -->
+			<div class="lg:col-span-2 space-y-6">
+				<!-- Track Header -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 p-6">
+					<div class="flex items-start gap-6">
+						<div class="w-24 h-24 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/25 flex-shrink-0">
+							<svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+							</svg>
+						</div>
+						<div class="flex-1 min-w-0">
+							<h1 class="text-2xl font-bold text-gray-900 dark:text-white truncate">{ getTrackTitle(track) }</h1>
+							if track.Artist.Valid {
+								<p class="text-lg text-gray-600 dark:text-gray-300 mt-1">{ track.Artist.String }</p>
+							}
+							if track.Album.Valid {
+								<p class="text-gray-500 dark:text-gray-400 mt-1">{ track.Album.String }</p>
+							}
+							<div class="flex items-center gap-4 mt-4">
+								<span class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-mono uppercase">{ track.Codec }</span>
+								<span class="text-sm text-gray-500 dark:text-gray-400">
+									{ fmt.Sprintf("%d kHz / %d-bit / %dch", track.SampleRate/1000, track.BitDepth, track.Channels) }
+								</span>
+								<span class="text-sm text-gray-500 dark:text-gray-400">
+									{ formatDuration(track.Duration) }
+								</span>
+							</div>
+						</div>
+						if analysis != nil {
+							<div class="flex-shrink-0">
+								@components.LosslessIndicator(analysis.LosslessStatus, analysis.LosslessScore)
+							</div>
+						}
+					</div>
+				</div>
+
+				<!-- Analysis Results -->
+				if analysis != nil {
+					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Analysis Results</h2>
+						</div>
+						<div class="p-6">
+							<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+								@AnalysisStat("Peak Level", fmt.Sprintf("%.1f dB", analysis.PeakLevel), analysis.PeakLevel > 0)
+								@AnalysisStat("True Peak", fmt.Sprintf("%.1f dB", analysis.TruePeak), analysis.TruePeak > 0)
+								@AnalysisStat("Loudness", fmt.Sprintf("%.1f LUFS", analysis.IntegratedLoudness), false)
+								@AnalysisStat("LRA", fmt.Sprintf("%.1f LU", analysis.LoudnessRange), false)
+							</div>
+
+							if len(analysis.Issues) > 0 {
+								<div class="border-t border-gray-200/50 dark:border-gray-800/50 pt-6">
+									<h3 class="text-sm font-medium text-gray-900 dark:text-white mb-4">Issues Detected</h3>
+									<div class="space-y-3">
+										for _, issue := range analysis.Issues {
+											@IssueCard(issue)
+										}
+									</div>
+								</div>
+							}
+						</div>
+					</div>
+				}
+
+				<!-- Evidence Artifacts -->
+				if len(artifacts) > 0 {
+					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Evidence</h2>
+							<button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors">
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+								</svg>
+								Export All
+							</button>
+						</div>
+						<div class="p-6 space-y-6">
+							for _, artifact := range artifacts {
+								<div>
+									<h3 class="text-sm font-medium text-gray-900 dark:text-white mb-3 capitalize">{ artifact.Type }</h3>
+									<div class="rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
+										<img src={ fmt.Sprintf("/artifacts/%s", artifact.ID) } alt={ artifact.Type } class="w-full"/>
+									</div>
+								</div>
+							}
+						</div>
+					</div>
+				}
+			</div>
+
+			<!-- Sidebar -->
+			<div class="space-y-6">
+				<!-- Metadata -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Metadata</h2>
+						<button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors">
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+							</svg>
+							Edit
+						</button>
+					</div>
+					<div class="p-6 space-y-4">
+						@MetadataRow("Title", getOptionalString(track.Title))
+						@MetadataRow("Artist", getOptionalString(track.Artist))
+						@MetadataRow("Album", getOptionalString(track.Album))
+						@MetadataRow("Album Artist", getOptionalString(track.AlbumArtist))
+						@MetadataRow("Track Number", getOptionalInt(track.TrackNumber))
+						@MetadataRow("Disc Number", getOptionalInt(track.DiscNumber))
+						@MetadataRow("Year", getOptionalInt(track.Year))
+						@MetadataRow("Genre", getOptionalString(track.Genre))
+					</div>
+				</div>
+
+				<!-- File Info -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">File Info</h2>
+					</div>
+					<div class="p-6 space-y-4">
+						@MetadataRow("Path", track.Path)
+						@MetadataRow("Codec", track.Codec)
+						@MetadataRow("Sample Rate", fmt.Sprintf("%d Hz", track.SampleRate))
+						@MetadataRow("Bit Depth", fmt.Sprintf("%d-bit", track.BitDepth))
+						@MetadataRow("Channels", fmt.Sprintf("%d", track.Channels))
+						@MetadataRow("Duration", formatDuration(track.Duration))
+						if track.Bitrate > 0 {
+							@MetadataRow("Bitrate", fmt.Sprintf("%d kbps", track.Bitrate/1000))
+						}
+					</div>
+				</div>
+
+				<!-- Actions -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Actions</h2>
+					</div>
+					<div class="p-6 space-y-3">
+						<button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+							</svg>
+							Re-analyze
+						</button>
+						<button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+							</svg>
+							Convert
+						</button>
+						<button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+							</svg>
+							Export Evidence
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ AnalysisStat(label, value string, isWarning bool) {
+	<div class={ fmt.Sprintf("p-4 rounded-xl %s", getStatBg(isWarning)) }>
+		<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{ label }</p>
+		<p class={ fmt.Sprintf("text-xl font-bold mt-1 %s", getStatColor(isWarning)) }>{ value }</p>
+	</div>
+}
+
+templ IssueCard(issue models.Issue) {
+	<div class={ fmt.Sprintf("flex items-start gap-4 p-4 rounded-xl %s", getIssueBg(issue.Severity)) }>
+		<div class={ fmt.Sprintf("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 %s", getIssueIconBg(issue.Severity)) }>
+			if issue.Severity == "error" {
+				<svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			} else if issue.Severity == "warning" {
+				<svg class="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+				</svg>
+			} else {
+				<svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+			}
+		</div>
+		<div class="flex-1 min-w-0">
+			<p class={ fmt.Sprintf("font-medium %s", getIssueTextColor(issue.Severity)) }>{ issue.Message }</p>
+			<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+				Confidence: { fmt.Sprintf("%.0f%%", issue.Confidence*100) }
+			</p>
+		</div>
+		if issue.ArtifactID != "" {
+			<button class="px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors flex-shrink-0">
+				View Evidence
+			</button>
+		}
+	</div>
+}
+
+templ MetadataRow(label, value string) {
+	<div class="flex justify-between gap-4">
+		<span class="text-sm text-gray-500 dark:text-gray-400 flex-shrink-0">{ label }</span>
+		if value != "" {
+			<span class="text-sm text-gray-900 dark:text-white text-right truncate">{ value }</span>
+		} else {
+			<span class="text-sm text-gray-400 dark:text-gray-500 italic">Not set</span>
+		}
+	</div>
+}
+
+func getFilterClass(current, filter string) string {
+	if current == filter {
+		return "bg-blue-600 text-white shadow-lg shadow-blue-500/25"
+	}
+	return "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+}
+
+func getTrackTitle(track *models.Track) string {
+	if track.Title.Valid {
+		return track.Title.String
+	}
+	return "Unknown Title"
+}
+
+func getStatBg(isWarning bool) string {
+	if isWarning {
+		return "bg-red-50 dark:bg-red-500/10"
+	}
+	return "bg-gray-50 dark:bg-gray-800/50"
+}
+
+func getStatColor(isWarning bool) string {
+	if isWarning {
+		return "text-red-600 dark:text-red-400"
+	}
+	return "text-gray-900 dark:text-white"
+}
+
+func getIssueBg(severity string) string {
+	switch severity {
+	case "error":
+		return "bg-red-50 dark:bg-red-500/10"
+	case "warning":
+		return "bg-amber-50 dark:bg-amber-500/10"
+	default:
+		return "bg-blue-50 dark:bg-blue-500/10"
+	}
+}
+
+func getIssueIconBg(severity string) string {
+	switch severity {
+	case "error":
+		return "bg-red-100 dark:bg-red-500/20"
+	case "warning":
+		return "bg-amber-100 dark:bg-amber-500/20"
+	default:
+		return "bg-blue-100 dark:bg-blue-500/20"
+	}
+}
+
+func getIssueTextColor(severity string) string {
+	switch severity {
+	case "error":
+		return "text-red-800 dark:text-red-300"
+	case "warning":
+		return "text-amber-800 dark:text-amber-300"
+	default:
+		return "text-blue-800 dark:text-blue-300"
+	}
+}
+
+func getOptionalString(s sql.NullString) string {
+	if s.Valid {
+		return s.String
+	}
+	return ""
+}
+
+func getOptionalInt(i sql.NullInt32) string {
+	if i.Valid {
+		return fmt.Sprintf("%d", i.Int32)
+	}
+	return ""
+}
+
+func formatDuration(seconds float64) string {
+	total := int(seconds)
+	hrs := total / 3600
+	mins := (total % 3600) / 60
+	secs := total % 60
+	if hrs > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", hrs, mins, secs)
+	}
+	return fmt.Sprintf("%d:%02d", mins, secs)
+}
