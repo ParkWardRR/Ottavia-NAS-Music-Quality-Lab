@@ -1,0 +1,45 @@
+# Seville - Music Quality Lab
+# Example configuration file
+
+# Server settings
+server:
+  # Host to bind to (0.0.0.0 for all interfaces)
+  host: "0.0.0.0"
+  # Port to listen on
+  port: 8080
+
+# Database settings
+database:
+  # Database driver (sqlite3 or postgres)
+  driver: "sqlite3"
+  # Database connection string
+  # For SQLite: path to database file
+  # For PostgreSQL: postgres://user:password@host:port/database?sslmode=disable
+  dsn: "./seville.db"
+
+# Scanner settings
+scanner:
+  # Default scan interval for new libraries
+  default_interval: "15m"
+  # Number of parallel analysis workers
+  worker_count: 4
+  # Batch size for file processing
+  batch_size: 100
+  # Maximum retry attempts for failed jobs
+  max_retries: 3
+  # Base backoff time in seconds for retries
+  retry_backoff_base: 60
+
+# Storage settings
+storage:
+  # Path to store analysis artifacts (spectrograms, waveforms, etc.)
+  artifacts_path: "./artifacts/data"
+  # Path for temporary files during processing
+  temp_path: "./artifacts/temp"
+
+# FFmpeg settings
+ffmpeg:
+  # Path to ffprobe binary (leave as "ffprobe" if in PATH)
+  ffprobe_path: "ffprobe"
+  # Path to ffmpeg binary (leave as "ffmpeg" if in PATH)
+  ffmpeg_path: "ffmpeg"

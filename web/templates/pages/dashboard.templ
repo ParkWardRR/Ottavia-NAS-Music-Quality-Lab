@@ -1,0 +1,273 @@
+package pages
+
+import (
+	"fmt"
+	"github.com/ottavia-music/seville/web/templates/layouts"
+	"github.com/ottavia-music/seville/web/templates/components"
+	"github.com/ottavia-music/seville/internal/database"
+	"github.com/ottavia-music/seville/internal/models"
+)
+
+templ Dashboard(stats *database.DashboardStats, libraries []models.Library, recentTracks []models.Track, settings map[string]string) {
+	@layouts.Base("Dashboard", settings) {
+		<!-- Header -->
+		<div class="mb-8">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+					<p class="mt-1 text-gray-500 dark:text-gray-400">Overview of your music library health</p>
+				</div>
+				<button
+					class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-200"
+					onclick="document.getElementById('addLibraryModal').classList.remove('hidden')"
+				>
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+					</svg>
+					Add Library
+				</button>
+			</div>
+		</div>
+
+		<!-- Stats Grid -->
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+			@components.StatCard("Libraries", fmt.Sprintf("%d", stats.TotalLibraries), "", LibrariesIcon(), "", "blue")
+			@components.StatCard("Total Tracks", formatNumber(stats.TotalTracks), formatSize(stats.TotalSize), TracksIcon(), "", "purple")
+			@components.StatCard("Issues Found", fmt.Sprintf("%d", stats.TracksWithIssues), "tracks need attention", IssuesIcon(), "", "orange")
+			@components.StatCard("Active Jobs", fmt.Sprintf("%d", stats.ActiveJobs), fmt.Sprintf("%d scans today", stats.RecentScans), JobsIcon(), "", "green")
+		</div>
+
+		<!-- Libraries Section -->
+		<div class="mb-8">
+			<div class="flex items-center justify-between mb-6">
+				<h2 class="text-xl font-semibold text-gray-900 dark:text-white">Libraries</h2>
+				<a href="/libraries" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">View all</a>
+			</div>
+			if len(libraries) == 0 {
+				@EmptyState("No libraries yet", "Add your first music library to start scanning", "Add Library")
+			} else {
+				<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+					for _, lib := range libraries {
+						@components.LibraryCard(lib)
+					}
+				</div>
+			}
+		</div>
+
+		<!-- Recent Activity -->
+		<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+			<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+				<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Tracks</h2>
+			</div>
+			if len(recentTracks) == 0 {
+				<div class="p-12 text-center">
+					<div class="w-16 h-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+						<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+						</svg>
+					</div>
+					<p class="text-gray-500 dark:text-gray-400">No tracks scanned yet</p>
+					<p class="text-sm text-gray-400 dark:text-gray-500 mt-1">Add a library and run a scan to see your tracks</p>
+				</div>
+			} else {
+				<div class="overflow-x-auto">
+					<table class="w-full">
+						<thead>
+							<tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200/50 dark:border-gray-800/50">
+								<th class="px-6 py-3">Track</th>
+								<th class="px-6 py-3">Album</th>
+								<th class="px-6 py-3">Format</th>
+								<th class="px-6 py-3">Duration</th>
+								<th class="px-6 py-3">Quality</th>
+								<th class="px-6 py-3"></th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-gray-200/50 dark:divide-gray-800/50">
+							for _, track := range recentTracks {
+								@components.TrackRow(track, nil)
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</div>
+
+		<!-- Add Library Modal -->
+		@AddLibraryModal()
+	}
+}
+
+templ EmptyState(title, description, action string) {
+	<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 p-12 text-center">
+		<div class="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25 mb-6">
+			<svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+			</svg>
+		</div>
+		<h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">{ title }</h3>
+		<p class="text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">{ description }</p>
+		<button
+			class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium shadow-lg shadow-blue-500/25 transition-all duration-200"
+			onclick="document.getElementById('addLibraryModal').classList.remove('hidden')"
+		>
+			<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+			</svg>
+			{ action }
+		</button>
+	</div>
+}
+
+templ AddLibraryModal() {
+	<div id="addLibraryModal" class="hidden fixed inset-0 z-50 overflow-y-auto" x-data="{ loading: false }">
+		<div class="flex items-center justify-center min-h-screen px-4">
+			<!-- Backdrop -->
+			<div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('addLibraryModal').classList.add('hidden')"></div>
+
+			<!-- Modal -->
+			<div class="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg p-8 transform transition-all">
+				<div class="absolute top-4 right-4">
+					<button
+						class="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+						onclick="document.getElementById('addLibraryModal').classList.add('hidden')"
+					>
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+						</svg>
+					</button>
+				</div>
+
+				<div class="mb-6">
+					<div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25 mb-4">
+						<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+						</svg>
+					</div>
+					<h3 class="text-xl font-semibold text-gray-900 dark:text-white">Add Library</h3>
+					<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Connect a music folder for quality scanning</p>
+				</div>
+
+				<form
+					hx-post="/api/libraries"
+					hx-target="body"
+					hx-swap="innerHTML"
+					class="space-y-5"
+				>
+					<div>
+						<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Library Name</label>
+						<input
+							type="text"
+							name="name"
+							required
+							class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+							placeholder="My Music Library"
+						/>
+					</div>
+
+					<div>
+						<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Root Path</label>
+						<input
+							type="text"
+							name="rootPath"
+							required
+							class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+							placeholder="/mnt/nas/music"
+						/>
+					</div>
+
+					<div>
+						<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Scan Interval</label>
+						<select
+							name="scanInterval"
+							class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+						>
+							<option value="5m">Every 5 minutes</option>
+							<option value="15m" selected>Every 15 minutes</option>
+							<option value="30m">Every 30 minutes</option>
+							<option value="1h">Every hour</option>
+							<option value="6h">Every 6 hours</option>
+							<option value="24h">Daily</option>
+						</select>
+					</div>
+
+					<div class="flex items-center gap-3">
+						<input
+							type="checkbox"
+							name="readOnly"
+							id="readOnly"
+							checked
+							class="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+						/>
+						<label for="readOnly" class="text-sm text-gray-700 dark:text-gray-300">Read-only mode (recommended)</label>
+					</div>
+
+					<div class="flex gap-3 pt-4">
+						<button
+							type="button"
+							class="flex-1 px-4 py-3 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+							onclick="document.getElementById('addLibraryModal').classList.add('hidden')"
+						>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							class="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium shadow-lg shadow-blue-500/25 transition-all"
+						>
+							Add Library
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+}
+
+templ LibrariesIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+	</svg>
+}
+
+templ TracksIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+	</svg>
+}
+
+templ IssuesIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+	</svg>
+}
+
+templ JobsIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+	</svg>
+}
+
+func formatNumber(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	if n < 1000000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1000)
+	}
+	return fmt.Sprintf("%.1fM", float64(n)/1000000)
+}
+
+func formatSize(bytes int64) string {
+	if bytes == 0 {
+		return "0 B"
+	}
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}

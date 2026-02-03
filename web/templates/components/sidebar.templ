@@ -1,0 +1,129 @@
+package components
+
+templ Sidebar() {
+	<aside class="fixed left-0 top-0 h-screen w-64 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 z-40 flex flex-col">
+		<!-- Logo -->
+		<div class="p-6 border-b border-gray-200/50 dark:border-gray-800/50">
+			<a href="/" class="flex items-center gap-3">
+				<div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
+					<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+					</svg>
+				</div>
+				<div>
+					<h1 class="text-lg font-semibold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 bg-clip-text text-transparent">Seville</h1>
+					<p class="text-xs text-gray-500 dark:text-gray-400">Music Quality Lab</p>
+				</div>
+			</a>
+		</div>
+
+		<!-- Navigation -->
+		<nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+			<div class="mb-6">
+				<p class="px-3 mb-2 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Overview</p>
+				@NavItem("/", "Dashboard", DashboardIcon())
+				@NavItem("/libraries", "Libraries", LibraryIcon())
+				@NavItem("/albums", "Albums", AlbumIcon())
+				@NavItem("/tracks", "All Tracks", MusicIcon())
+			</div>
+
+			<div class="mb-6">
+				<p class="px-3 mb-2 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Analysis</p>
+				@NavItem("/issues", "Issues", WarningIcon())
+				@NavItem("/evidence", "Evidence", ChartIcon())
+				@NavItem("/duplicates", "Duplicates", CopyIcon())
+			</div>
+
+			<div class="mb-6">
+				<p class="px-3 mb-2 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Tools</p>
+				@NavItem("/conversions", "Conversions", ConvertIcon())
+				@NavItem("/jobs", "Job Queue", QueueIcon())
+			</div>
+		</nav>
+
+		<!-- Footer -->
+		<div class="p-4 border-t border-gray-200/50 dark:border-gray-800/50">
+			@NavItem("/settings", "Settings", SettingsIcon())
+			<div class="mt-4 px-3">
+				<div class="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+					<div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+					<span>All systems operational</span>
+				</div>
+			</div>
+		</div>
+	</aside>
+}
+
+templ NavItem(href, label string, icon templ.Component) {
+	<a
+		href={ templ.SafeURL(href) }
+		class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 group"
+		:class={ "{ 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400': $store.router.path === '" + href + "' }" }
+	>
+		<span class="w-5 h-5 opacity-60 group-hover:opacity-100 transition-opacity">
+			@icon
+		</span>
+		<span>{ label }</span>
+	</a>
+}
+
+templ DashboardIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 13a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1h-4a1 1 0 01-1-1v-6z"></path>
+	</svg>
+}
+
+templ LibraryIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+	</svg>
+}
+
+templ MusicIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+	</svg>
+}
+
+templ AlbumIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+	</svg>
+}
+
+templ WarningIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+	</svg>
+}
+
+templ ChartIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+	</svg>
+}
+
+templ CopyIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+	</svg>
+}
+
+templ ConvertIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+	</svg>
+}
+
+templ QueueIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+	</svg>
+}
+
+templ SettingsIcon() {
+	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+	</svg>
+}

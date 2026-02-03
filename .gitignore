@@ -1,0 +1,67 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+seville
+bin/
+
+# Build artifacts
+dist/
+build/
+
+# Test binary, coverage
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Artifacts storage
+/artifacts/data/
+
+# Generated files
+*_templ.go
+
+# Logs
+*.log
+logs/
+
+# Node modules (for tailwind build)
+node_modules/
+
+# Screenshots (generated)
+/screenshots/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Context directory
+.context/
+config.yaml
