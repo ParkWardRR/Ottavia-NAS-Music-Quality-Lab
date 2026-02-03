@@ -3,6 +3,7 @@ package pages
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"github.com/ottavia-music/ottavia/web/templates/layouts"
 	"github.com/ottavia-music/ottavia/web/templates/components"
 	"github.com/ottavia-music/ottavia/internal/models"
@@ -142,7 +143,7 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 		<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 			<!-- Main Content -->
 			<div class="lg:col-span-2 space-y-6">
-				<!-- Track Header -->
+				<!-- Track Header with Quality Badges -->
 				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 p-6">
 					<div class="flex items-start gap-6">
 						<div class="w-24 h-24 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/25 flex-shrink-0">
@@ -158,7 +159,7 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 							if track.Album.Valid {
 								<p class="text-gray-500 dark:text-gray-400 mt-1">{ track.Album.String }</p>
 							}
-							<div class="flex items-center gap-4 mt-4">
+							<div class="flex flex-wrap items-center gap-2 mt-4">
 								<span class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-mono uppercase">{ track.Codec }</span>
 								<span class="text-sm text-gray-500 dark:text-gray-400">
 									{ fmt.Sprintf("%d kHz / %d-bit / %dch", track.SampleRate/1000, track.BitDepth, track.Channels) }
@@ -168,58 +169,212 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 								</span>
 							</div>
 						</div>
-						if analysis != nil {
-							<div class="flex-shrink-0">
-								@components.LosslessIndicator(analysis.LosslessStatus, analysis.LosslessScore)
-							</div>
-						}
 					</div>
+
+					<!-- Quality Summary Badges -->
+					if analysis != nil {
+						<div class="mt-6 pt-6 border-t border-gray-200/50 dark:border-gray-800/50">
+							<h3 class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Quality Summary</h3>
+							<div class="flex flex-wrap gap-2">
+								@TrackQualityBadge("Authenticity", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
+								@TrackQualityBadge("Integrity", getIntegrityStatus(analysis), getIntegrityShortLabel(analysis))
+								@TrackQualityBadge("Dynamics", getDRStatus(analysis), fmt.Sprintf("DR%d", calculateDR(analysis)))
+								@TrackQualityBadge("Clipping", getClippingStatus(analysis), getClippingShortLabel(analysis))
+							</div>
+						</div>
+					}
 				</div>
 
-				<!-- Analysis Results -->
 				if analysis != nil {
+					<!-- Lossless Authenticity Analysis -->
 					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
-						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
-							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Analysis Results</h2>
+						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								@StatusIcon(analysis.LosslessStatus)
+								<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Lossless Authenticity</h2>
+							</div>
+							@TrackQualityBadge("", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
+						</div>
+						<div class="p-6">
+							<p class={ fmt.Sprintf("text-sm mb-4 %s", getLosslessTextColor(analysis.LosslessStatus)) }>
+								{ getLosslessExplanation(analysis, track) }
+							</p>
+							<div class="grid grid-cols-2 gap-4">
+								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">High Freq Cutoff</p>
+									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">
+										if analysis.HighFreqCutoff > 0 {
+											{ fmt.Sprintf("%.1f kHz", analysis.HighFreqCutoff/1000) }
+										} else {
+											N/A
+										}
+									</p>
+									<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Expected: { fmt.Sprintf("%.1f kHz", float64(track.SampleRate)/2000) }</p>
+								</div>
+								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Confidence Score</p>
+									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.0f%%", analysis.LosslessScore) }</p>
+									<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{ getConfidenceText(analysis.LosslessScore) }</p>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Dynamic Range (Loudness War) Analysis -->
+					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								@StatusIcon(getDRStatus(analysis))
+								<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Dynamic Range</h2>
+							</div>
+							@TrackDRBadge(calculateDR(analysis))
+						</div>
+						<div class="p-6">
+							<div class="flex items-center gap-6 mb-6">
+								<div class="text-center">
+									<div class={ fmt.Sprintf("text-5xl font-bold %s", getDRColor(calculateDR(analysis))) }>
+										DR{ fmt.Sprintf("%d", calculateDR(analysis)) }
+									</div>
+									<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{ getDRRating(calculateDR(analysis)) }</p>
+								</div>
+								<div class="flex-1">
+									<p class="text-sm text-gray-600 dark:text-gray-300">{ getDRExplanation(calculateDR(analysis)) }</p>
+								</div>
+							</div>
+
+							<!-- DR Visual Scale -->
+							<div class="mb-6">
+								<div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+									<span>Crushed</span>
+									<span>Limited</span>
+									<span>Moderate</span>
+									<span>Good</span>
+									<span>Excellent</span>
+								</div>
+								<div class="h-3 bg-gradient-to-r from-red-500 via-orange-500 via-yellow-500 via-green-500 to-emerald-500 rounded-full relative">
+									<div class="absolute top-0 bottom-0 w-1 bg-white shadow-lg rounded-full transform -translate-x-1/2" style={ fmt.Sprintf("left: %d%%", minInt(calculateDR(analysis)*5, 100)) }></div>
+								</div>
+							</div>
+
+							<div class="grid grid-cols-3 gap-4">
+								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Loudness</p>
+									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.1f", analysis.IntegratedLoudness) }</p>
+									<p class="text-xs text-gray-500 dark:text-gray-400">LUFS</p>
+								</div>
+								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Range</p>
+									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.1f", analysis.LoudnessRange) }</p>
+									<p class="text-xs text-gray-500 dark:text-gray-400">LU</p>
+								</div>
+								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Crest Factor</p>
+									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.1f", analysis.CrestFactor) }</p>
+									<p class="text-xs text-gray-500 dark:text-gray-400">dB</p>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Audio Integrity & Levels -->
+					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								@StatusIcon(getIntegrityStatus(analysis))
+								<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Audio Integrity & Levels</h2>
+							</div>
+							@TrackQualityBadge("", getIntegrityStatus(analysis), getIntegrityShortLabel(analysis))
 						</div>
 						<div class="p-6">
 							<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-								@AnalysisStat("Peak Level", fmt.Sprintf("%.1f dB", analysis.PeakLevel), analysis.PeakLevel > 0)
-								@AnalysisStat("True Peak", fmt.Sprintf("%.1f dB", analysis.TruePeak), analysis.TruePeak > 0)
-								@AnalysisStat("Loudness", fmt.Sprintf("%.1f LUFS", analysis.IntegratedLoudness), false)
-								@AnalysisStat("LRA", fmt.Sprintf("%.1f LU", analysis.LoudnessRange), false)
+								@ProStat("Peak Level", fmt.Sprintf("%.1f dB", analysis.PeakLevel), analysis.PeakLevel > 0, "Max amplitude")
+								@ProStat("True Peak", fmt.Sprintf("%.1f dB", analysis.TruePeak), analysis.TruePeak > 0, "Inter-sample peak")
+								@ProStat("Clipped", fmt.Sprintf("%d", analysis.ClippedSamples), analysis.ClippedSamples > 0, "samples")
+								@ProStat("DC Offset", fmt.Sprintf("%.3f", analysis.DCOffset), analysis.DCOffset > 0.01 || analysis.DCOffset < -0.01, "baseline shift")
 							</div>
 
-							if len(analysis.Issues) > 0 {
-								<div class="border-t border-gray-200/50 dark:border-gray-800/50 pt-6">
-									<h3 class="text-sm font-medium text-gray-900 dark:text-white mb-4">Issues Detected</h3>
-									<div class="space-y-3">
-										for _, issue := range analysis.Issues {
-											@IssueCard(issue)
-										}
+							if analysis.ClippedSamples > 0 {
+								<div class="p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
+									<div class="flex items-start gap-3">
+										<svg class="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+										</svg>
+										<div>
+											<p class="text-sm font-medium text-amber-800 dark:text-amber-300">Clipping Detected</p>
+											<p class="text-sm text-amber-700 dark:text-amber-400 mt-1">
+												{ fmt.Sprintf("%d clipped samples found. This causes distortion and is typically from aggressive mastering.", analysis.ClippedSamples) }
+											</p>
+										</div>
+									</div>
+								</div>
+							}
+
+							if !analysis.IntegrityOK {
+								<div class="p-4 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 mt-4">
+									<div class="flex items-start gap-3">
+										<svg class="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+										</svg>
+										<div>
+											<p class="text-sm font-medium text-red-800 dark:text-red-300">File Integrity Issues</p>
+											<p class="text-sm text-red-700 dark:text-red-400 mt-1">
+												{ fmt.Sprintf("%d decode errors detected. The file may be corrupted.", analysis.DecodeErrors) }
+											</p>
+										</div>
 									</div>
 								</div>
 							}
 						</div>
 					</div>
+
+					<!-- Technical Details -->
+					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Technical Details</h2>
+						</div>
+						<div class="p-6 grid grid-cols-2 gap-4">
+							<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+								<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Spectral Rolloff</p>
+								<p class="text-lg font-bold text-gray-900 dark:text-white mt-1">
+									if analysis.SpectralRolloff > 0 {
+										{ fmt.Sprintf("%.1f kHz", analysis.SpectralRolloff/1000) }
+									} else {
+										N/A
+									}
+								</p>
+							</div>
+							<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+								<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Phase Correlation</p>
+								<p class="text-lg font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.2f", analysis.PhaseCorrelation) }</p>
+							</div>
+						</div>
+					</div>
+
+					<!-- Issues -->
+					if len(analysis.Issues) > 0 {
+						<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+							<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+								<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Issues ({ fmt.Sprintf("%d", len(analysis.Issues)) })</h2>
+							</div>
+							<div class="p-6 space-y-3">
+								for _, issue := range analysis.Issues {
+									@IssueCard(issue)
+								}
+							</div>
+						</div>
+					}
 				}
 
 				<!-- Evidence Artifacts -->
 				if len(artifacts) > 0 {
 					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
-						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
-							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Evidence</h2>
-							<button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors">
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-								</svg>
-								Export All
-							</button>
+						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Visual Evidence</h2>
 						</div>
 						<div class="p-6 space-y-6">
 							for _, artifact := range artifacts {
 								<div>
-									<h3 class="text-sm font-medium text-gray-900 dark:text-white mb-3 capitalize">{ artifact.Type }</h3>
+									<h3 class="text-sm font-medium text-gray-900 dark:text-white mb-2 capitalize">{ artifact.Type }</h3>
 									<div class="rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
 										<img src={ fmt.Sprintf("/artifacts/%s", artifact.ID) } alt={ artifact.Type } class="w-full"/>
 									</div>
@@ -232,24 +387,34 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 
 			<!-- Sidebar -->
 			<div class="space-y-6">
+				<!-- Quick Assessment -->
+				if analysis != nil {
+					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Quick Assessment</h2>
+						</div>
+						<div class="p-6 space-y-3">
+							@AssessmentRow("Lossless", analysis.LosslessStatus == "pass")
+							@AssessmentRow("No Clipping", analysis.ClippedSamples == 0)
+							@AssessmentRow("Good Dynamics", calculateDR(analysis) >= 10)
+							@AssessmentRow("File Integrity", analysis.IntegrityOK)
+							@AssessmentRow("Proper Levels", analysis.PeakLevel <= 0 && analysis.TruePeak <= 0)
+						</div>
+					</div>
+				}
+
 				<!-- Metadata -->
 				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
-					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
 						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Metadata</h2>
-						<button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors">
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-							</svg>
-							Edit
-						</button>
 					</div>
 					<div class="p-6 space-y-4">
 						@MetadataRow("Title", getOptionalString(track.Title))
 						@MetadataRow("Artist", getOptionalString(track.Artist))
 						@MetadataRow("Album", getOptionalString(track.Album))
 						@MetadataRow("Album Artist", getOptionalString(track.AlbumArtist))
-						@MetadataRow("Track Number", getOptionalInt(track.TrackNumber))
-						@MetadataRow("Disc Number", getOptionalInt(track.DiscNumber))
+						@MetadataRow("Track", getOptionalInt(track.TrackNumber))
+						@MetadataRow("Disc", getOptionalInt(track.DiscNumber))
 						@MetadataRow("Year", getOptionalInt(track.Year))
 						@MetadataRow("Genre", getOptionalString(track.Genre))
 					</div>
@@ -261,8 +426,7 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">File Info</h2>
 					</div>
 					<div class="p-6 space-y-4">
-						@MetadataRow("Path", track.Path)
-						@MetadataRow("Codec", track.Codec)
+						@MetadataRow("Codec", strings.ToUpper(track.Codec))
 						@MetadataRow("Sample Rate", fmt.Sprintf("%d Hz", track.SampleRate))
 						@MetadataRow("Bit Depth", fmt.Sprintf("%d-bit", track.BitDepth))
 						@MetadataRow("Channels", fmt.Sprintf("%d", track.Channels))
@@ -287,12 +451,6 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 						</button>
 						<button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
 							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
-							</svg>
-							Convert
-						</button>
-						<button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
 							</svg>
 							Export Evidence
@@ -304,10 +462,80 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 	}
 }
 
-templ AnalysisStat(label, value string, isWarning bool) {
+// Component templates
+
+templ TrackQualityBadge(label, status, text string) {
+	<span class={ fmt.Sprintf("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium %s", getTrackBadgeClass(status)) }>
+		if status == "pass" {
+			<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+			</svg>
+		} else if status == "fail" {
+			<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+			</svg>
+		} else {
+			<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01"></path>
+			</svg>
+		}
+		if label != "" {
+			{ label }:
+		}
+		{ text }
+	</span>
+}
+
+templ TrackDRBadge(dr int) {
+	<span class={ fmt.Sprintf("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold %s", getTrackDRBadgeClass(dr)) }>
+		DR{ fmt.Sprintf("%d", dr) }
+	</span>
+}
+
+templ StatusIcon(status string) {
+	<div class={ fmt.Sprintf("w-8 h-8 rounded-full flex items-center justify-center %s", getStatusIconBg(status)) }>
+		if status == "pass" {
+			<svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+			</svg>
+		} else if status == "fail" {
+			<svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+			</svg>
+		} else {
+			<svg class="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+			</svg>
+		}
+	</div>
+}
+
+templ ProStat(label, value string, isWarning bool, unit string) {
 	<div class={ fmt.Sprintf("p-4 rounded-xl %s", getStatBg(isWarning)) }>
-		<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{ label }</p>
+		<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{ label }</p>
 		<p class={ fmt.Sprintf("text-xl font-bold mt-1 %s", getStatColor(isWarning)) }>{ value }</p>
+		<p class="text-xs text-gray-500 dark:text-gray-400">{ unit }</p>
+	</div>
+}
+
+templ AssessmentRow(label string, passed bool) {
+	<div class="flex items-center justify-between">
+		<span class="text-sm text-gray-600 dark:text-gray-300">{ label }</span>
+		if passed {
+			<span class="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+				</svg>
+				Pass
+			</span>
+		} else {
+			<span class="inline-flex items-center gap-1 text-sm font-medium text-red-600 dark:text-red-400">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+				Fail
+			</span>
+		}
 	</div>
 }
 
@@ -330,15 +558,8 @@ templ IssueCard(issue models.Issue) {
 		</div>
 		<div class="flex-1 min-w-0">
 			<p class={ fmt.Sprintf("font-medium %s", getIssueTextColor(issue.Severity)) }>{ issue.Message }</p>
-			<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-				Confidence: { fmt.Sprintf("%.0f%%", issue.Confidence*100) }
-			</p>
+			<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Confidence: { fmt.Sprintf("%.0f%%", issue.Confidence*100) }</p>
 		</div>
-		if issue.ArtifactID != "" {
-			<button class="px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors flex-shrink-0">
-				View Evidence
-			</button>
-		}
 	</div>
 }
 
@@ -348,10 +569,12 @@ templ MetadataRow(label, value string) {
 		if value != "" {
 			<span class="text-sm text-gray-900 dark:text-white text-right truncate">{ value }</span>
 		} else {
-			<span class="text-sm text-gray-400 dark:text-gray-500 italic">Not set</span>
+			<span class="text-sm text-gray-400 dark:text-gray-500 italic">—</span>
 		}
 	</div>
 }
+
+// Helper functions
 
 func getFilterClass(current, filter string) string {
 	if current == filter {
@@ -365,6 +588,43 @@ func getTrackTitle(track *models.Track) string {
 		return track.Title.String
 	}
 	return "Unknown Title"
+}
+
+func getTrackBadgeClass(status string) string {
+	switch status {
+	case "pass":
+		return "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+	case "fail":
+		return "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400"
+	default:
+		return "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400"
+	}
+}
+
+func getTrackDRBadgeClass(dr int) string {
+	switch {
+	case dr >= 14:
+		return "bg-emerald-500 text-white"
+	case dr >= 10:
+		return "bg-green-500 text-white"
+	case dr >= 7:
+		return "bg-yellow-500 text-white"
+	case dr >= 4:
+		return "bg-orange-500 text-white"
+	default:
+		return "bg-red-500 text-white"
+	}
+}
+
+func getStatusIconBg(status string) string {
+	switch status {
+	case "pass":
+		return "bg-emerald-100 dark:bg-emerald-500/20"
+	case "fail":
+		return "bg-red-100 dark:bg-red-500/20"
+	default:
+		return "bg-amber-100 dark:bg-amber-500/20"
+	}
 }
 
 func getStatBg(isWarning bool) string {
@@ -437,4 +697,159 @@ func formatDuration(seconds float64) string {
 		return fmt.Sprintf("%d:%02d:%02d", hrs, mins, secs)
 	}
 	return fmt.Sprintf("%d:%02d", mins, secs)
+}
+
+// Analysis helper functions
+
+func getLosslessShortLabel(status string) string {
+	switch status {
+	case "pass":
+		return "Verified"
+	case "fail":
+		return "Suspicious"
+	default:
+		return "Warning"
+	}
+}
+
+func getLosslessTextColor(status string) string {
+	switch status {
+	case "pass":
+		return "text-emerald-700 dark:text-emerald-300"
+	case "fail":
+		return "text-red-700 dark:text-red-300"
+	default:
+		return "text-amber-700 dark:text-amber-300"
+	}
+}
+
+func getLosslessExplanation(analysis *models.AnalysisResult, track *models.Track) string {
+	if analysis.LosslessStatus == "pass" {
+		return "This file appears to be genuine lossless audio. High-frequency content extends naturally to the expected range, indicating it wasn't converted from a lossy source."
+	}
+	if analysis.LosslessStatus == "warn" {
+		return fmt.Sprintf("This %s file shows signs it may have been converted from a lossy source. High frequencies appear to cut off around %.0f Hz instead of extending to %.0f Hz.", strings.ToUpper(track.Codec), analysis.HighFreqCutoff, float64(track.SampleRate)/2)
+	}
+	return fmt.Sprintf("Strong evidence this %s file was converted from a lossy source. The audio shows a hard frequency cutoff around %.0f Hz - a telltale sign of MP3/AAC compression.", strings.ToUpper(track.Codec), analysis.HighFreqCutoff)
+}
+
+func getConfidenceText(score float64) string {
+	if score >= 90 {
+		return "High confidence"
+	}
+	if score >= 70 {
+		return "Moderate confidence"
+	}
+	return "Low confidence"
+}
+
+func getIntegrityStatus(analysis *models.AnalysisResult) string {
+	if !analysis.IntegrityOK || analysis.DecodeErrors > 0 {
+		return "fail"
+	}
+	if analysis.ClippedSamples > 100 {
+		return "warn"
+	}
+	return "pass"
+}
+
+func getIntegrityShortLabel(analysis *models.AnalysisResult) string {
+	if !analysis.IntegrityOK {
+		return "Corrupted"
+	}
+	if analysis.ClippedSamples > 0 {
+		return "Clipping"
+	}
+	return "OK"
+}
+
+func getClippingStatus(analysis *models.AnalysisResult) string {
+	if analysis.ClippedSamples > 100 {
+		return "fail"
+	}
+	if analysis.ClippedSamples > 0 {
+		return "warn"
+	}
+	return "pass"
+}
+
+func getClippingShortLabel(analysis *models.AnalysisResult) string {
+	if analysis.ClippedSamples > 0 {
+		return fmt.Sprintf("%d clips", analysis.ClippedSamples)
+	}
+	return "None"
+}
+
+func calculateDR(analysis *models.AnalysisResult) int {
+	dr := int(analysis.LoudnessRange + analysis.CrestFactor/2)
+	if dr < 1 {
+		return 1
+	}
+	if dr > 20 {
+		return 20
+	}
+	return dr
+}
+
+func getDRStatus(analysis *models.AnalysisResult) string {
+	dr := calculateDR(analysis)
+	if dr >= 10 {
+		return "pass"
+	}
+	if dr >= 7 {
+		return "warn"
+	}
+	return "fail"
+}
+
+func getDRColor(dr int) string {
+	switch {
+	case dr >= 14:
+		return "text-emerald-600 dark:text-emerald-400"
+	case dr >= 10:
+		return "text-green-600 dark:text-green-400"
+	case dr >= 7:
+		return "text-yellow-600 dark:text-yellow-400"
+	case dr >= 4:
+		return "text-orange-600 dark:text-orange-400"
+	default:
+		return "text-red-600 dark:text-red-400"
+	}
+}
+
+func getDRRating(dr int) string {
+	switch {
+	case dr >= 14:
+		return "Excellent"
+	case dr >= 10:
+		return "Good"
+	case dr >= 7:
+		return "Moderate"
+	case dr >= 4:
+		return "Limited"
+	default:
+		return "Crushed"
+	}
+}
+
+func getDRExplanation(dr int) string {
+	switch {
+	case dr >= 14:
+		return "Excellent dynamic range. This track breathes naturally with clear distinction between quiet and loud moments. Perfect for critical listening."
+	case dr >= 10:
+		return "Good dynamics. Well-mastered with reasonable contrast between quiet and loud sections."
+	case dr >= 7:
+		return "Moderate dynamics. Some compression was applied during mastering, reducing the difference between quiet and loud parts."
+	case dr >= 4:
+		return "Limited dynamic range - a casualty of the 'loudness wars'. The audio is heavily compressed to sound louder, losing musical nuance."
+	default:
+		return "Heavily compressed (brickwalled). Almost no difference between quiet and loud sections. Common in modern pop/rock releases."
+	}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
