@@ -55,8 +55,8 @@ logs/
 # Node modules (for tailwind build)
 node_modules/
 
-# Screenshots (generated)
-/screenshots/
+# Screenshots - keep for README
+# /screenshots/
 
 # Playwright
 playwright-report/

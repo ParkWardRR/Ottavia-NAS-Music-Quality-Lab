@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ottavia-music/seville/main/screenshots/logo.svg" alt="Seville Logo" width="120" height="120">
+  <img src="web/static/img/logo.svg" alt="Seville Logo" width="120" height="120">
 </p>
 
 <h1 align="center">Seville</h1>
@@ -27,10 +27,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/stars/ottavia-music/seville?style=flat-square&logo=github&color=yellow" alt="Stars">
-  <img src="https://img.shields.io/github/forks/ottavia-music/seville?style=flat-square&logo=github" alt="Forks">
-  <img src="https://img.shields.io/github/issues/ottavia-music/seville?style=flat-square&logo=github" alt="Issues">
-  <img src="https://img.shields.io/github/last-commit/ottavia-music/seville?style=flat-square&logo=github" alt="Last Commit">
+  <img src="https://img.shields.io/github/stars/ParkWardRR/Ottavia-NAS-Music-Quality-Lab?style=flat-square&logo=github&color=yellow" alt="Stars">
+  <img src="https://img.shields.io/github/forks/ParkWardRR/Ottavia-NAS-Music-Quality-Lab?style=flat-square&logo=github" alt="Forks">
+  <img src="https://img.shields.io/github/issues/ParkWardRR/Ottavia-NAS-Music-Quality-Lab?style=flat-square&logo=github" alt="Issues">
+  <img src="https://img.shields.io/github/last-commit/ParkWardRR/Ottavia-NAS-Music-Quality-Lab?style=flat-square&logo=github" alt="Last Commit">
 </p>
 
 <p align="center">
@@ -135,7 +135,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/ottavia-music/seville.git
+git clone https://github.com/ParkWardRR/Ottavia-NAS-Music-Quality-Lab.git
 cd seville
 
 # Install dependencies and build
@@ -151,14 +151,14 @@ Open http://localhost:8080 in your browser.
 ### Using Go Install
 
 ```bash
-go install github.com/ottavia-music/seville/cmd/server@latest
+go install github.com/ParkWardRR/Ottavia-NAS-Music-Quality-Lab/cmd/server@latest
 ```
 
 ### Docker
 
 ```bash
-docker pull ghcr.io/ottavia-music/seville:latest
-docker run -p 8080:8080 -v /path/to/music:/music -v seville-data:/data ghcr.io/ottavia-music/seville
+docker pull ghcr.io/ParkWardRR/Ottavia-NAS-Music-Quality-Lab:latest
+docker run -p 8080:8080 -v /path/to/music:/music -v seville-data:/data ghcr.io/ParkWardRR/Ottavia-NAS-Music-Quality-Lab
 ```
 
 ### From Source
@@ -427,7 +427,7 @@ This project is licensed under the [Blue Oak Model License 1.0.0](LICENSE).
 </p>
 
 <p align="center">
-  <a href="https://github.com/ottavia-music/seville">
+  <a href="https://github.com/ParkWardRR/Ottavia-NAS-Music-Quality-Lab">
     <img src="https://img.shields.io/badge/⭐_Star_this_repo-If_you_find_it_useful!-yellow?style=for-the-badge" alt="Star">
   </a>
 </p>
