@@ -21,9 +21,15 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go Version">
+  <img src="https://img.shields.io/badge/GOAT_Stack-Go%20%2B%20templ%20%2B%20Alpine%20%2B%20Tailwind-purple?style=flat-square" alt="GOAT Stack">
+  <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
+  <img src="https://img.shields.io/badge/FFmpeg-007808?style=flat-square&logo=ffmpeg&logoColor=white" alt="FFmpeg">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-AlmaLinux%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/License-Blue_Oak-blue?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square" alt="PRs Welcome">
-  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-lightgrey?style=flat-square" alt="Platform">
 </p>
 
 <p align="center">
@@ -31,24 +37,6 @@
   <img src="https://img.shields.io/github/forks/ParkWardRR/Ottavia-NAS-Music-Quality-Lab?style=flat-square&logo=github" alt="Forks">
   <img src="https://img.shields.io/github/issues/ParkWardRR/Ottavia-NAS-Music-Quality-Lab?style=flat-square&logo=github" alt="Issues">
   <img src="https://img.shields.io/github/last-commit/ParkWardRR/Ottavia-NAS-Music-Quality-Lab?style=flat-square&logo=github" alt="Last Commit">
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/FLAC-Supported-green?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyeiIvPjwvc3ZnPg==" alt="FLAC">
-  <img src="https://img.shields.io/badge/ALAC-Supported-green?style=flat-square" alt="ALAC">
-  <img src="https://img.shields.io/badge/WAV-Supported-green?style=flat-square" alt="WAV">
-  <img src="https://img.shields.io/badge/AIFF-Supported-green?style=flat-square" alt="AIFF">
-  <img src="https://img.shields.io/badge/MP3-Supported-green?style=flat-square" alt="MP3">
-  <img src="https://img.shields.io/badge/AAC-Supported-green?style=flat-square" alt="AAC">
-  <img src="https://img.shields.io/badge/OGG-Supported-green?style=flat-square" alt="OGG">
-  <img src="https://img.shields.io/badge/OPUS-Supported-green?style=flat-square" alt="OPUS">
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/UI-Apple_Design-black?style=flat-square&logo=apple" alt="Apple Design">
-  <img src="https://img.shields.io/badge/Framework-GOAT_Stack-purple?style=flat-square" alt="GOAT Stack">
-  <img src="https://img.shields.io/badge/Database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite">
-  <img src="https://img.shields.io/badge/Testing-Playwright-45ba4b?style=flat-square&logo=playwright" alt="Playwright">
 </p>
 
 ---
@@ -81,10 +69,16 @@
 - Re-verification after conversion
 
 ### 🖥️ **Modern UI**
-- Apple-inspired design language
+- Clean, professional design
 - Dark/Light theme support
 - Responsive layout
 - Real-time updates
+
+### 📈 **Loudness War Analysis**
+- Dynamic Range (DR) scoring
+- Visual DR scale with color coding
+- Clipping detection and sample counts
+- Human-readable explanations for audiophiles and beginners
 
 ---
 
@@ -213,10 +207,10 @@ ffmpeg:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEVILLE_CONFIG` | Config file path | `./config.yaml` |
-| `SEVILLE_PORT` | Server port | `8080` |
-| `SEVILLE_DB_DSN` | Database DSN | `./ottavia.db` |
-| `SEVILLE_DEBUG` | Enable debug mode | `false` |
+| `OTTAVIA_CONFIG` | Config file path | `./config.yaml` |
+| `OTTAVIA_PORT` | Server port | `8080` |
+| `OTTAVIA_DB_DSN` | Database DSN | `./ottavia.db` |
+| `OTTAVIA_DEBUG` | Enable debug mode | `false` |
 
 ---
 
@@ -382,13 +376,13 @@ make lint
 
 ## 🗺️ Roadmap
 
-- [x] Phase 0: Project foundation
+- [x] Phase 0: Project foundation + branding
 - [x] Phase 1: Scanner MVP
-- [ ] Phase 2: Probe + basic tests
-- [ ] Phase 3: Lossy ancestry heuristics
-- [ ] Phase 4: Metadata editor
-- [ ] Phase 5: Conversion queue
-- [ ] Phase 6: Hardening + deployment
+- [x] Phase 2: Probe + audio analysis
+- [x] Phase 3: Lossy detection + dynamic range scoring
+- [ ] Phase 4: Metadata editor + bulk operations
+- [ ] Phase 5: Conversion queue + progress UI
+- [ ] Phase 6: Hardening + production deployment
 
 See [roadmap.md](roadmap.md) for details.
 
