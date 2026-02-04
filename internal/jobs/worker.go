@@ -112,12 +112,17 @@ func (w *Worker) processNextJob(ctx context.Context, workerID int) {
 		return
 	}
 
+	logger := GetGlobalLogger()
+	logger.StartJob(job.ID, job.TargetID)
+
 	log.Info().
 		Str("job_id", job.ID).
 		Str("type", job.Type).
 		Str("target", job.TargetID).
 		Int("worker", workerID).
 		Msg("Processing job")
+
+	logger.Info(job.ID, "", "Processing "+job.Type+" job for track "+job.TargetID)
 
 	// Job is already marked as running by GetNextJob, just increment attempts
 	job.Attempts++
@@ -129,12 +134,14 @@ func (w *Worker) processNextJob(ctx context.Context, workerID int) {
 		processErr = w.analyzer.AnalyzeFile(ctx, job.TargetID)
 	case "audioscan":
 		if w.audioScanner != nil {
-			processErr = w.audioScanner.ScanTrack(ctx, job.TargetID)
+			processErr = w.audioScanner.ScanTrackWithLogger(ctx, job.TargetID, job.ID, logger)
 		} else {
 			log.Warn().Msg("Audio scanner not configured")
+			logger.Warn(job.ID, "", "Audio scanner not configured", "")
 		}
 	default:
 		log.Warn().Str("type", job.Type).Msg("Unknown job type")
+		logger.Warn(job.ID, "", "Unknown job type: "+job.Type, "")
 		return
 	}
 
@@ -142,6 +149,7 @@ func (w *Worker) processNextJob(ctx context.Context, workerID int) {
 	if processErr != nil {
 		log.Error().Err(processErr).Str("job_id", job.ID).Msg("Job failed")
 		job.LastError = sql.NullString{String: processErr.Error(), Valid: true}
+		logger.EndJob(job.ID, false, processErr.Error())
 
 		if job.Attempts >= job.MaxAttempts {
 			job.Status = models.StatusFailed
@@ -156,6 +164,7 @@ func (w *Worker) processNextJob(ctx context.Context, workerID int) {
 		log.Info().Str("job_id", job.ID).Msg("Job completed")
 		job.Status = models.StatusSuccess
 		job.FinishedAt = sql.NullTime{Time: time.Now(), Valid: true}
+		logger.EndJob(job.ID, true, "")
 	}
 
 	w.db.UpdateJob(ctx, job)

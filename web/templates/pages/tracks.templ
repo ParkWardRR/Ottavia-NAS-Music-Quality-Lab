@@ -1031,8 +1031,69 @@ templ AudioScanPanels(trackID string) {
 
 		<!-- Run Audio Scan Button (when no manifest) -->
 		<template x-if="!loading && !manifest">
-			<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 p-6">
-				<div class="text-center">
+			<div
+				x-data={ fmt.Sprintf(`{
+					scanning: false,
+					jobId: null,
+					logs: [],
+					logIndex: 0,
+					status: '',
+					async runScan() {
+						this.scanning = true;
+						this.logs = [];
+						this.logIndex = 0;
+						this.status = 'starting';
+						try {
+							const response = await fetch('/api/tracks/%s/audioscan', { method: 'POST' });
+							const result = await response.json();
+							if (result.status === 'queued') {
+								this.jobId = result.jobId;
+								this.status = 'running';
+								this.pollLogs();
+							}
+						} catch (e) {
+							this.logs.push({ level: 'error', message: 'Failed to start scan: ' + e.message });
+							this.status = 'failed';
+							this.scanning = false;
+						}
+					},
+					async pollLogs() {
+						if (!this.jobId) return;
+						try {
+							const response = await fetch('/api/jobs/' + this.jobId + '/logs?since=' + this.logIndex);
+							if (response.ok) {
+								const data = await response.json();
+								this.logs = [...this.logs, ...data.entries];
+								this.logIndex = data.nextIndex;
+								this.status = data.status;
+								if (data.status === 'running') {
+									setTimeout(() => this.pollLogs(), 500);
+								} else if (data.status === 'completed') {
+									$data.loading = true;
+									await $data.loadManifest();
+									this.scanning = false;
+								} else {
+									this.scanning = false;
+								}
+							}
+						} catch (e) {
+							console.error('Failed to poll logs:', e);
+							setTimeout(() => this.pollLogs(), 1000);
+						}
+					},
+					levelColor(level) {
+						switch(level) {
+							case 'error': return 'text-red-500';
+							case 'warn': return 'text-yellow-500';
+							case 'debug': return 'text-gray-400';
+							default: return 'text-green-500';
+						}
+					}
+				}`, trackID) }
+				class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden"
+			>
+				<!-- Header -->
+				<div class="p-6 text-center" x-show="!scanning">
 					<div class="w-16 h-16 mx-auto rounded-full bg-purple-100 dark:bg-purple-500/20 flex items-center justify-center mb-4">
 						<svg class="w-8 h-8 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
@@ -1043,15 +1104,7 @@ templ AudioScanPanels(trackID string) {
 						Run detailed spectrum, loudness, clipping, phase, and dynamics analysis on this track.
 					</p>
 					<button
-						@click={ fmt.Sprintf(`async () => {
-							$data.loading = true;
-							const response = await fetch('/api/tracks/%s/audioscan', { method: 'POST' });
-							const result = await response.json();
-							if (result.status === 'queued') {
-								alert('Audio scan job queued. Refresh the page in a few moments to see results.');
-							}
-							$data.loading = false;
-						}`, trackID) }
+						@click="runScan()"
 						class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-purple-600 text-white font-medium hover:bg-purple-700 transition-colors"
 					>
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1059,6 +1112,38 @@ templ AudioScanPanels(trackID string) {
 						</svg>
 						Run Audio Scan
 					</button>
+				</div>
+
+				<!-- Scanning Progress with Verbose Log -->
+				<div x-show="scanning" class="flex flex-col">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<svg class="animate-spin w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+							<span class="font-medium text-gray-900 dark:text-white">Running Audio Scan Analysis</span>
+						</div>
+						<span
+							class="px-2.5 py-1 rounded-lg text-xs font-medium uppercase"
+							:class="status === 'running' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : status === 'completed' ? 'bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400'"
+							x-text="status"
+						></span>
+					</div>
+					<div class="bg-gray-900 text-gray-100 p-4 font-mono text-sm h-80 overflow-y-auto" x-ref="logContainer">
+						<template x-for="(log, index) in logs" :key="index">
+							<div class="flex gap-2 py-0.5">
+								<span class="text-gray-500 select-none" x-text="new Date(log.timestamp).toLocaleTimeString()"></span>
+								<span :class="levelColor(log.level)" class="uppercase text-xs font-bold w-12" x-text="log.level"></span>
+								<span class="text-gray-400" x-show="log.module" x-text="'[' + log.module + ']'"></span>
+								<span x-text="log.message"></span>
+								<span class="text-gray-500" x-show="log.details" x-text="log.details"></span>
+							</div>
+						</template>
+						<div x-show="status === 'running'" class="flex items-center gap-2 py-1 text-gray-400">
+							<span class="animate-pulse">▋</span>
+						</div>
+					</div>
 				</div>
 			</div>
 		</template>

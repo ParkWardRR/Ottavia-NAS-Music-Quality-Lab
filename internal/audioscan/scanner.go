@@ -49,9 +49,41 @@ func (s *Scanner) GetArtifactsPath() string {
 	return s.artifactsPath
 }
 
-// ScanTrack performs full audio scan analysis on a track
+// JobLogger interface for verbose logging
+type JobLogger interface {
+	Info(jobID, module, message string)
+	Debug(jobID, module, message, details string)
+	Warn(jobID, module, message, details string)
+	Error(jobID, module, message, details string)
+}
+
+// ScanTrack performs full audio scan analysis on a track (without verbose logging)
 func (s *Scanner) ScanTrack(ctx context.Context, trackID string) error {
-	log.Info().Str("trackId", trackID).Msg("Starting Audio Scan analysis")
+	return s.ScanTrackWithLogger(ctx, trackID, "", nil)
+}
+
+// ScanTrackWithLogger performs full audio scan analysis with verbose logging
+func (s *Scanner) ScanTrackWithLogger(ctx context.Context, trackID string, jobID string, logger JobLogger) error {
+	logInfo := func(module, msg string) {
+		log.Info().Str("trackId", trackID).Str("module", module).Msg(msg)
+		if logger != nil && jobID != "" {
+			logger.Info(jobID, module, msg)
+		}
+	}
+	logDebug := func(module, msg, details string) {
+		log.Debug().Str("trackId", trackID).Str("module", module).Msg(msg)
+		if logger != nil && jobID != "" {
+			logger.Debug(jobID, module, msg, details)
+		}
+	}
+	logWarn := func(module, msg, details string) {
+		log.Warn().Str("trackId", trackID).Str("module", module).Msg(msg)
+		if logger != nil && jobID != "" {
+			logger.Warn(jobID, module, msg, details)
+		}
+	}
+
+	logInfo("", "Starting Audio Scan analysis")
 
 	// Get track and its probe data
 	track, err := s.db.GetTrack(ctx, trackID)
@@ -59,11 +91,16 @@ func (s *Scanner) ScanTrack(ctx context.Context, trackID string) error {
 		return fmt.Errorf("get track: %w", err)
 	}
 
+	logInfo("", fmt.Sprintf("Track: %s", track.Title))
+	logDebug("", "Track details", fmt.Sprintf("Path: %s, Duration: %.1fs, Sample Rate: %dHz, Channels: %d, Codec: %s",
+		track.Path, track.Duration, track.SampleRate, track.Channels, track.Codec))
+
 	// Create artifact directory
 	artifactDir, err := EnsureArtifactDir(s.artifactsPath, trackID)
 	if err != nil {
 		return fmt.Errorf("ensure artifact dir: %w", err)
 	}
+	logDebug("", "Artifact directory ready", artifactDir)
 
 	// Build probe cache from track metadata
 	probeCache := ProbeCache{
@@ -82,29 +119,66 @@ func (s *Scanner) ScanTrack(ctx context.Context, trackID string) error {
 	// Create manifest
 	manifest := NewManifest(trackID, probeCache)
 
-	// Run each analysis module (raw data only, no PNG generation)
-	s.runAudioScanModule(ctx, track, manifest, artifactDir)
-	s.runLoudnessModule(ctx, track, manifest, artifactDir)
-	s.runClippingModule(ctx, track, manifest, artifactDir)
-	s.runPhaseModule(ctx, track, manifest, artifactDir)
-	s.runDynamicsModule(ctx, track, manifest, artifactDir)
+	// Determine analysis duration
+	duration := track.Duration
+	if s.maxDuration > 0 && duration > s.maxDuration {
+		duration = s.maxDuration
+		logInfo("", fmt.Sprintf("Analyzing first %.0f seconds (of %.0fs total)", duration, track.Duration))
+	} else {
+		logInfo("", fmt.Sprintf("Analyzing full track (%.1f seconds)", duration))
+	}
+
+	// Run each analysis module with verbose logging
+	logInfo("audioscan", "Running spectrum analysis module...")
+	s.runAudioScanModuleWithLog(ctx, track, manifest, artifactDir, logInfo, logDebug, logWarn)
+
+	logInfo("loudness", "Running loudness analysis module...")
+	s.runLoudnessModuleWithLog(ctx, track, manifest, artifactDir, logInfo, logDebug, logWarn)
+
+	logInfo("clipping", "Running clipping detection module...")
+	s.runClippingModuleWithLog(ctx, track, manifest, artifactDir, logInfo, logDebug, logWarn)
+
+	logInfo("phase", "Running phase correlation module...")
+	s.runPhaseModuleWithLog(ctx, track, manifest, artifactDir, logInfo, logDebug, logWarn)
+
+	logInfo("dynamics", "Running dynamics analysis module...")
+	s.runDynamicsModuleWithLog(ctx, track, manifest, artifactDir, logInfo, logDebug, logWarn)
 
 	// Save manifest
+	logInfo("", "Saving analysis manifest...")
 	if err := manifest.Save(artifactDir); err != nil {
 		return fmt.Errorf("save manifest: %w", err)
 	}
 
 	// Update analysis_results with summary scalars
 	if err := s.updateAnalysisResults(ctx, trackID, manifest); err != nil {
-		log.Warn().Err(err).Str("trackId", trackID).Msg("Failed to update analysis results")
+		logWarn("", "Failed to update analysis results", err.Error())
 	}
 
-	log.Info().Str("trackId", trackID).Msg("Audio Scan analysis complete")
+	// Log summary
+	logInfo("", "Audio Scan analysis complete")
+	for name, mod := range manifest.Modules {
+		if mod.Status == "ok" {
+			logInfo(name, fmt.Sprintf("Module %s: OK", name))
+		} else if mod.Status == "skipped" {
+			logInfo(name, fmt.Sprintf("Module %s: Skipped", name))
+		} else {
+			logWarn(name, fmt.Sprintf("Module %s: %s", name, mod.Status), "")
+		}
+	}
+
 	return nil
 }
 
-// runAudioScanModule performs spectrum analysis
+// runAudioScanModule performs spectrum analysis (no verbose logging)
 func (s *Scanner) runAudioScanModule(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string) {
+	noop := func(string, string) {}
+	noopD := func(string, string, string) {}
+	s.runAudioScanModuleWithLog(ctx, track, manifest, dir, noop, noopD, noopD)
+}
+
+// runAudioScanModuleWithLog performs spectrum analysis with verbose logging
+func (s *Scanner) runAudioScanModuleWithLog(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string, logInfo func(string, string), logDebug func(string, string, string), logWarn func(string, string, string)) {
 	log.Debug().Str("trackId", track.ID).Msg("Running audioscan module")
 
 	// Calculate analysis parameters from probe cache
@@ -112,6 +186,8 @@ func (s *Scanner) runAudioScanModule(ctx context.Context, track *models.Track, m
 	nyquist := sampleRate / 2
 	fftSize := 4096
 	hopSize := fftSize / 4
+
+	logDebug("audioscan", "FFT parameters configured", fmt.Sprintf("FFT size: %d, Hop size: %d, Nyquist: %dHz", fftSize, hopSize, nyquist))
 
 	// Determine analysis duration
 	duration := track.Duration
@@ -147,12 +223,17 @@ func (s *Scanner) runAudioScanModule(ctx context.Context, track *models.Track, m
 		}
 	}
 
+	logDebug("audioscan", "Running FFmpeg spectrum extraction", fmt.Sprintf("Duration: %.1fs, Mode: %s", duration, curve.Analyzed.ChannelMode))
+
 	// Run FFmpeg to extract spectrum data
 	freqHz, levelDb, err := s.extractSpectrumCurve(ctx, track.Path, fftSize, duration)
 	if err != nil {
+		logWarn("audioscan", "Spectrum analysis failed", err.Error())
 		manifest.SetModuleError("audioscan", "Spectrum analysis failed", err.Error())
 		return
 	}
+
+	logDebug("audioscan", "FFmpeg spectrum extraction complete", fmt.Sprintf("Extracted %d frequency bins", len(freqHz)))
 
 	curve.Curve.FreqHz = freqHz
 	curve.Curve.LevelDb = levelDb
@@ -162,9 +243,15 @@ func (s *Scanner) runAudioScanModule(ctx context.Context, track *models.Track, m
 	curve.Metrics.BandwidthHz = calculateBandwidth(freqHz, levelDb)
 	curve.Metrics.DCMean, curve.Metrics.DCFlag = s.calculateDC(ctx, track.Path, duration)
 
+	logInfo("audioscan", fmt.Sprintf("Detected bandwidth: %d Hz", curve.Metrics.BandwidthHz))
+	if curve.Metrics.DCFlag {
+		logWarn("audioscan", "DC offset detected in audio", fmt.Sprintf("DC Mean: %.4f", curve.Metrics.DCMean))
+	}
+
 	// Save raw data
 	rawPath := fmt.Sprintf("%s/audioscan_curve_v1.msgpack.zst", dir)
 	if err := SaveMsgpackZstd(rawPath, curve); err != nil {
+		logWarn("audioscan", "Failed to save raw data", err.Error())
 		manifest.SetModuleError("audioscan", "Failed to save raw data", err.Error())
 		return
 	}
@@ -175,6 +262,9 @@ func (s *Scanner) runAudioScanModule(ctx context.Context, track *models.Track, m
 	// Determine quality classification
 	expectedQuality := deriveExpectedQuality(manifest.ProbeCache)
 	detectedQuality, qualityReason := classifyDetectedQuality(curve)
+
+	logInfo("audioscan", fmt.Sprintf("Quality: Expected=%s, Detected=%s", expectedQuality, detectedQuality))
+	logDebug("audioscan", "Quality reason", qualityReason)
 
 	// Build render hints from probe cache (computed, not hard-coded)
 	renderHints := &RenderHints{
@@ -202,10 +292,19 @@ func (s *Scanner) runAudioScanModule(ctx context.Context, track *models.Track, m
 		SHA256:      rawHash,
 		ContentType: "application/x-msgpack+zstd",
 	}, renderHints)
+
+	logInfo("audioscan", "Spectrum analysis module complete")
 }
 
-// runLoudnessModule performs loudness analysis over time
+// runLoudnessModule performs loudness analysis over time (no verbose logging)
 func (s *Scanner) runLoudnessModule(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string) {
+	noop := func(string, string) {}
+	noopD := func(string, string, string) {}
+	s.runLoudnessModuleWithLog(ctx, track, manifest, dir, noop, noopD, noopD)
+}
+
+// runLoudnessModuleWithLog performs loudness analysis with verbose logging
+func (s *Scanner) runLoudnessModuleWithLog(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string, logInfo func(string, string), logDebug func(string, string, string), logWarn func(string, string, string)) {
 	log.Debug().Str("trackId", track.ID).Msg("Running loudness module")
 
 	duration := track.Duration
@@ -213,15 +312,22 @@ func (s *Scanner) runLoudnessModule(ctx context.Context, track *models.Track, ma
 		duration = s.maxDuration
 	}
 
+	logDebug("loudness", "Running EBU R128 loudness analysis", fmt.Sprintf("Duration: %.1fs", duration))
+
 	series, err := s.extractLoudnessSeries(ctx, track.Path, duration)
 	if err != nil {
+		logWarn("loudness", "Loudness analysis failed", err.Error())
 		manifest.SetModuleError("loudness", "Loudness analysis failed", err.Error())
 		return
 	}
 
+	logInfo("loudness", fmt.Sprintf("Integrated: %.1f LUFS, LRA: %.1f LU, True Peak: %.1f dBTP",
+		series.IntegratedLUFS, series.LRA, series.MaxTruePeak))
+
 	// Save raw data
 	rawPath := fmt.Sprintf("%s/loudness_series_v1.msgpack.zst", dir)
 	if err := SaveMsgpackZstd(rawPath, series); err != nil {
+		logWarn("loudness", "Failed to save raw data", err.Error())
 		manifest.SetModuleError("loudness", "Failed to save raw data", err.Error())
 		return
 	}
@@ -251,10 +357,19 @@ func (s *Scanner) runLoudnessModule(ctx context.Context, track *models.Track, ma
 		SHA256:      rawHash,
 		ContentType: "application/x-msgpack+zstd",
 	}, renderHints)
+
+	logInfo("loudness", "Loudness analysis module complete")
 }
 
-// runClippingModule performs clipping detection
+// runClippingModule performs clipping detection (no verbose logging)
 func (s *Scanner) runClippingModule(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string) {
+	noop := func(string, string) {}
+	noopD := func(string, string, string) {}
+	s.runClippingModuleWithLog(ctx, track, manifest, dir, noop, noopD, noopD)
+}
+
+// runClippingModuleWithLog performs clipping detection with verbose logging
+func (s *Scanner) runClippingModuleWithLog(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string, logInfo func(string, string), logDebug func(string, string, string), logWarn func(string, string, string)) {
 	log.Debug().Str("trackId", track.ID).Msg("Running clipping module")
 
 	duration := track.Duration
@@ -262,15 +377,25 @@ func (s *Scanner) runClippingModule(ctx context.Context, track *models.Track, ma
 		duration = s.maxDuration
 	}
 
+	logDebug("clipping", "Running clipping detection", fmt.Sprintf("Duration: %.1fs", duration))
+
 	series, err := s.extractClippingSeries(ctx, track.Path, duration)
 	if err != nil {
+		logWarn("clipping", "Clipping analysis failed", err.Error())
 		manifest.SetModuleError("clipping", "Clipping analysis failed", err.Error())
 		return
+	}
+
+	if series.TotalClipped > 0 {
+		logWarn("clipping", fmt.Sprintf("Clipping detected: %d clipped samples, %d overs", series.TotalClipped, series.TotalOvers), "")
+	} else {
+		logInfo("clipping", "No clipping detected")
 	}
 
 	// Save raw data
 	rawPath := fmt.Sprintf("%s/clipping_series_v1.msgpack.zst", dir)
 	if err := SaveMsgpackZstd(rawPath, series); err != nil {
+		logWarn("clipping", "Failed to save raw data", err.Error())
 		manifest.SetModuleError("clipping", "Failed to save raw data", err.Error())
 		return
 	}
@@ -294,11 +419,21 @@ func (s *Scanner) runClippingModule(ctx context.Context, track *models.Track, ma
 		SHA256:      rawHash,
 		ContentType: "application/x-msgpack+zstd",
 	}, renderHints)
+
+	logInfo("clipping", "Clipping detection module complete")
 }
 
-// runPhaseModule performs stereo phase analysis
+// runPhaseModule performs stereo phase analysis (no verbose logging)
 func (s *Scanner) runPhaseModule(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string) {
+	noop := func(string, string) {}
+	noopD := func(string, string, string) {}
+	s.runPhaseModuleWithLog(ctx, track, manifest, dir, noop, noopD, noopD)
+}
+
+// runPhaseModuleWithLog performs stereo phase analysis with verbose logging
+func (s *Scanner) runPhaseModuleWithLog(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string, logInfo func(string, string), logDebug func(string, string, string), logWarn func(string, string, string)) {
 	if track.Channels < 2 {
+		logInfo("phase", "Skipping phase analysis (mono track)")
 		manifest.SetModuleSkipped("phase", "Mono track - phase analysis not applicable")
 		return
 	}
@@ -310,15 +445,26 @@ func (s *Scanner) runPhaseModule(ctx context.Context, track *models.Track, manif
 		duration = s.maxDuration
 	}
 
+	logDebug("phase", "Running stereo phase correlation analysis", fmt.Sprintf("Duration: %.1fs", duration))
+
 	series, err := s.extractPhaseSeries(ctx, track.Path, duration)
 	if err != nil {
+		logWarn("phase", "Phase analysis failed", err.Error())
 		manifest.SetModuleError("phase", "Phase analysis failed", err.Error())
 		return
+	}
+
+	logInfo("phase", fmt.Sprintf("Correlation: Min=%.2f, Avg=%.2f, Max Imbalance=%.1f dB",
+		series.MinCorrelation, series.AvgCorrelation, series.MaxImbalanceDb))
+
+	if series.MinCorrelation < -0.5 || series.AvgCorrelation < 0 {
+		logWarn("phase", "Potential phase issues detected", "Low or negative correlation may indicate phase problems")
 	}
 
 	// Save raw data
 	rawPath := fmt.Sprintf("%s/phase_series_v1.msgpack.zst", dir)
 	if err := SaveMsgpackZstd(rawPath, series); err != nil {
+		logWarn("phase", "Failed to save raw data", err.Error())
 		manifest.SetModuleError("phase", "Failed to save raw data", err.Error())
 		return
 	}
@@ -345,10 +491,19 @@ func (s *Scanner) runPhaseModule(ctx context.Context, track *models.Track, manif
 		SHA256:      rawHash,
 		ContentType: "application/x-msgpack+zstd",
 	}, renderHints)
+
+	logInfo("phase", "Phase analysis module complete")
 }
 
-// runDynamicsModule performs dynamics/DR segmentation
+// runDynamicsModule performs dynamics/DR segmentation (no verbose logging)
 func (s *Scanner) runDynamicsModule(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string) {
+	noop := func(string, string) {}
+	noopD := func(string, string, string) {}
+	s.runDynamicsModuleWithLog(ctx, track, manifest, dir, noop, noopD, noopD)
+}
+
+// runDynamicsModuleWithLog performs dynamics/DR segmentation with verbose logging
+func (s *Scanner) runDynamicsModuleWithLog(ctx context.Context, track *models.Track, manifest *AnalysisManifest, dir string, logInfo func(string, string), logDebug func(string, string, string), logWarn func(string, string, string)) {
 	log.Debug().Str("trackId", track.ID).Msg("Running dynamics module")
 
 	duration := track.Duration
@@ -356,15 +511,22 @@ func (s *Scanner) runDynamicsModule(ctx context.Context, track *models.Track, ma
 		duration = s.maxDuration
 	}
 
+	logDebug("dynamics", "Running dynamic range analysis", fmt.Sprintf("Duration: %.1fs", duration))
+
 	series, err := s.extractDynamicsSeries(ctx, track.Path, duration)
 	if err != nil {
+		logWarn("dynamics", "Dynamics analysis failed", err.Error())
 		manifest.SetModuleError("dynamics", "Dynamics analysis failed", err.Error())
 		return
 	}
 
+	logInfo("dynamics", fmt.Sprintf("DR Score: %d, Avg Crest: %.1f dB, Min Crest: %.1f dB",
+		series.DRScore, series.AvgCrestDb, series.MinCrestDb))
+
 	// Save raw data
 	rawPath := fmt.Sprintf("%s/dynamics_series_v1.msgpack.zst", dir)
 	if err := SaveMsgpackZstd(rawPath, series); err != nil {
+		logWarn("dynamics", "Failed to save raw data", err.Error())
 		manifest.SetModuleError("dynamics", "Failed to save raw data", err.Error())
 		return
 	}
@@ -390,6 +552,8 @@ func (s *Scanner) runDynamicsModule(ctx context.Context, track *models.Track, ma
 		SHA256:      rawHash,
 		ContentType: "application/x-msgpack+zstd",
 	}, renderHints)
+
+	logInfo("dynamics", "Dynamics analysis module complete")
 }
 
 // updateAnalysisResults updates the DB analysis_results with summary scalars

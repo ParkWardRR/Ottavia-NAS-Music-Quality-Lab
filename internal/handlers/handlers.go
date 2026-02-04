@@ -837,11 +837,123 @@ func (h *Handler) RunAudioScan(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// RunBulkAudioScan queues audio scan jobs for all tracks (optionally filtered by library)
+func (h *Handler) RunBulkAudioScan(w http.ResponseWriter, r *http.Request) {
+	libraryID := r.URL.Query().Get("library_id")
+	skipExisting := r.URL.Query().Get("skip_existing") == "true"
+
+	// Get all tracks
+	tracks, total, err := h.db.ListTracks(r.Context(), libraryID, "", 10000, 0)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	queued := 0
+	skipped := 0
+
+	for _, track := range tracks {
+		// Optionally skip tracks that already have analysis
+		if skipExisting {
+			// Check if manifest exists by trying to load it
+			// For now, we'll skip this check and just queue all
+		}
+
+		job := &models.Job{
+			Type:        "audioscan",
+			TargetType:  "track",
+			TargetID:    track.ID,
+			Status:      models.StatusQueued,
+			MaxAttempts: 3,
+		}
+
+		if err := h.db.CreateJob(r.Context(), job); err != nil {
+			log.Warn().Err(err).Str("trackId", track.ID).Msg("Failed to queue audio scan job")
+			skipped++
+			continue
+		}
+		queued++
+	}
+
+	h.respondJSON(w, http.StatusAccepted, map[string]interface{}{
+		"status":  "queued",
+		"total":   total,
+		"queued":  queued,
+		"skipped": skipped,
+		"message": fmt.Sprintf("Queued %d audio scan jobs", queued),
+	})
+}
+
 // Health check
 
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, map[string]string{
 		"status":  "healthy",
 		"version": "1.0.0",
+	})
+}
+
+// Job logs - for verbose output during scans
+
+// JobLoggerInterface allows dependency injection of the job logger
+type JobLoggerInterface interface {
+	GetLogSince(jobID string, sinceIndex int) ([]interface{}, int, string)
+	GetRecentJobs(limit int) interface{}
+	GetLog(jobID string) interface{}
+}
+
+var globalJobLogger JobLoggerInterface
+
+// SetJobLogger sets the global job logger for handlers
+func SetJobLogger(logger JobLoggerInterface) {
+	globalJobLogger = logger
+}
+
+func (h *Handler) GetJobLogs(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "id")
+	sinceStr := r.URL.Query().Get("since")
+
+	if globalJobLogger == nil {
+		h.respondError(w, http.StatusServiceUnavailable, "Job logger not available")
+		return
+	}
+
+	var sinceIndex int
+	if sinceStr != "" {
+		fmt.Sscanf(sinceStr, "%d", &sinceIndex)
+	}
+
+	entries, nextIndex, status := globalJobLogger.GetLogSince(jobID, sinceIndex)
+
+	if entries == nil {
+		h.respondError(w, http.StatusNotFound, "Job not found")
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"entries":   entries,
+		"nextIndex": nextIndex,
+		"status":    status,
+	})
+}
+
+func (h *Handler) ListJobLogs(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	limit := 20
+	if limitStr != "" {
+		fmt.Sscanf(limitStr, "%d", &limit)
+	}
+
+	if globalJobLogger == nil {
+		h.respondJSON(w, http.StatusOK, map[string]interface{}{
+			"jobs": []interface{}{},
+		})
+		return
+	}
+
+	jobs := globalJobLogger.GetRecentJobs(limit)
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"jobs": jobs,
 	})
 }

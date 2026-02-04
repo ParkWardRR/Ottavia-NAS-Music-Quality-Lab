@@ -101,6 +101,9 @@ func main() {
 	// Initialize audio scan API handler for dynamic series endpoints
 	audioScanAPI := audioscan.NewAPIHandler(audioScanner)
 
+	// Set up job logger for handlers
+	handlers.SetJobLogger(jobs.GetGlobalLogger())
+
 	// Start job workers
 	worker := jobs.NewWorker(db, analyzerSvc, audioScanner, cfg.Scanner.WorkerCount)
 	worker.Start(context.Background())
@@ -180,6 +183,8 @@ func main() {
 
 		// Jobs
 		r.Get("/jobs", h.ListJobs)
+		r.Get("/jobs/logs", h.ListJobLogs)
+		r.Get("/jobs/{id}/logs", h.GetJobLogs)
 
 		// Settings
 		r.Get("/settings", h.GetSettings)
@@ -198,6 +203,7 @@ func main() {
 		// Audio scan analysis
 		r.Get("/tracks/{id}/audioscan", h.GetAudioScanManifest)
 		r.Post("/tracks/{id}/audioscan", h.RunAudioScan)
+		r.Post("/audioscan/bulk", h.RunBulkAudioScan)
 
 		// Dynamic series API (for interactive charts)
 		r.Get("/tracks/{id}/audioscan/manifest", audioScanAPI.GetManifest)
