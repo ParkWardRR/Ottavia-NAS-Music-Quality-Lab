@@ -148,6 +148,12 @@ Are your "lossless" files actually lossless? Many FLAC and ALAC files in the wil
 </p>
 
 <p align="center">
+  <img src="screenshots/artwork-dark.png" alt="Album Art Manager" width="100%">
+  <br>
+  <em>Album Art Manager - Find and fix missing artwork with AI-powered suggestions</em>
+</p>
+
+<p align="center">
   <img src="screenshots/conversions-dark.png" alt="Conversions" width="100%">
   <br>
   <em>Conversion Queue - Monitor format conversions with progress tracking</em>

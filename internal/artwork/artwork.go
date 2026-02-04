@@ -114,15 +114,22 @@ func (m *Manager) ListMissingArtwork(ctx context.Context, libraryID string) ([]M
 	for rows.Next() {
 		var summary MissingArtworkSummary
 		var trackIDsStr string
-		var yearNull *int32
+		var yearNull sql.NullInt32
+		var albumNull, albumArtistNull sql.NullString
 
-		err := rows.Scan(&summary.Album, &summary.AlbumArtist, &yearNull, &summary.TrackCount, &trackIDsStr)
+		err := rows.Scan(&albumNull, &albumArtistNull, &yearNull, &summary.TrackCount, &trackIDsStr)
 		if err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 
-		if yearNull != nil {
-			year := int(*yearNull)
+		if albumNull.Valid {
+			summary.Album = albumNull.String
+		}
+		if albumArtistNull.Valid {
+			summary.AlbumArtist = albumArtistNull.String
+		}
+		if yearNull.Valid {
+			year := int(yearNull.Int32)
 			summary.Year = &year
 		}
 		summary.TrackIDs = strings.Split(trackIDsStr, ",")
