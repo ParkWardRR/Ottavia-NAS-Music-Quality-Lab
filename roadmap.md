@@ -50,7 +50,7 @@
 ## Phase 5 — Conversion queue 🔄 IN PROGRESS
 - [x] Conversion profiles (iPod/Red Book compatible targets)
 - [x] Queue + worker infrastructure (shared with analysis jobs)
-- [ ] Dedicated conversion progress UI with logs
+- [x] Dedicated conversion progress UI with logs
 - [ ] Retry handling with exponential backoff
 - [ ] Provenance tracking (output files link back to source + profile + timestamp)
 - [ ] Post-conversion re-scan (validate outputs and attach evidence)
@@ -107,6 +107,15 @@
 - Album detail page with consistency analysis
 - Dark and light mode variants
 - Mobile responsive view
+
+### Conversion Progress UI
+- Full conversions page with job queue display
+- Real-time progress bars for running jobs
+- Status badges (queued, running, success, failed)
+- Conversion profiles sidebar showing available targets
+- Statistics panel with job counts by status
+- "How to Convert" instructional section
+- Error message display for failed jobs
 
 ### Server Deployment
 - Deployed on AlmaLinux with nginx reverse proxy
