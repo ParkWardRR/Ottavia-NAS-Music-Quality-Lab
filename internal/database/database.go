@@ -300,6 +300,14 @@ func (db *DB) UpdateTrack(ctx context.Context, track *models.Track) error {
 	return err
 }
 
+func (db *DB) UpdateTrackArtworkStatus(ctx context.Context, trackID string, hasArtwork bool, width, height int32) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE tracks SET has_artwork = ?, artwork_width = ?, artwork_height = ?, updated_at = ?
+		WHERE id = ?
+	`, hasArtwork, width, height, time.Now(), trackID)
+	return err
+}
+
 // AnalysisResult operations
 
 func (db *DB) CreateAnalysisResult(ctx context.Context, result *models.AnalysisResult) error {

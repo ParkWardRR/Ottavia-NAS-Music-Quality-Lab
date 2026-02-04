@@ -3,13 +3,16 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/ottavia-music/ottavia/internal/analyzer"
+	"github.com/ottavia-music/ottavia/internal/artwork"
 	"github.com/ottavia-music/ottavia/internal/database"
 	"github.com/ottavia-music/ottavia/internal/metadata"
 	"github.com/ottavia-music/ottavia/internal/models"
@@ -21,14 +24,16 @@ type Handler struct {
 	scanner        *scanner.Scanner
 	analyzer       *analyzer.Analyzer
 	metadataWriter *metadata.Writer
+	artworkManager *artwork.Manager
 }
 
-func New(db *database.DB, scanner *scanner.Scanner, analyzer *analyzer.Analyzer, metadataWriter *metadata.Writer) *Handler {
+func New(db *database.DB, scanner *scanner.Scanner, analyzer *analyzer.Analyzer, metadataWriter *metadata.Writer, artworkManager *artwork.Manager) *Handler {
 	return &Handler{
 		db:             db,
 		scanner:        scanner,
 		analyzer:       analyzer,
 		metadataWriter: metadataWriter,
+		artworkManager: artworkManager,
 	}
 }
 
@@ -628,6 +633,140 @@ func (h *Handler) ListActionLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondJSON(w, http.StatusOK, logs)
+}
+
+// Artwork management
+
+func (h *Handler) ListMissingArtwork(w http.ResponseWriter, r *http.Request) {
+	libraryID := r.URL.Query().Get("library_id")
+
+	missing, err := h.artworkManager.ListMissingArtwork(r.Context(), libraryID)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, missing)
+}
+
+type ExtractArtworkRequest struct {
+	TrackIDs []string `json:"trackIds"`
+}
+
+func (h *Handler) ExtractArtwork(w http.ResponseWriter, r *http.Request) {
+	var req ExtractArtworkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if len(req.TrackIDs) == 0 {
+		h.respondError(w, http.StatusBadRequest, "No track IDs provided")
+		return
+	}
+
+	results := []interface{}{}
+	for _, trackID := range req.TrackIDs {
+		result, err := h.artworkManager.ExtractArtwork(r.Context(), trackID)
+		if err != nil {
+			log.Error().Err(err).Str("trackId", trackID).Msg("Failed to extract artwork")
+			continue
+		}
+		results = append(results, result)
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"results": results,
+	})
+}
+
+func (h *Handler) UploadArtwork(w http.ResponseWriter, r *http.Request) {
+	trackID := chi.URLParam(r, "id")
+
+	// Parse multipart form
+	err := r.ParseMultipartForm(10 << 20) // 10 MB max
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "Failed to parse form data")
+		return
+	}
+
+	file, header, err := r.FormFile("artwork")
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "No artwork file provided")
+		return
+	}
+	defer file.Close()
+
+	// Read file data
+	imageData, err := io.ReadAll(file)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "Failed to read artwork file")
+		return
+	}
+
+	// Determine MIME type
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		// Guess from file extension
+		if strings.HasSuffix(strings.ToLower(header.Filename), ".png") {
+			mimeType = "image/png"
+		} else {
+			mimeType = "image/jpeg"
+		}
+	}
+
+	artworkInfo, err := h.artworkManager.UploadArtwork(r.Context(), trackID, imageData, mimeType)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, artworkInfo)
+}
+
+type ApplyArtworkRequest struct {
+	SourceTrackID  string   `json:"sourceTrackId"`
+	TargetTrackIDs []string `json:"targetTrackIds"`
+}
+
+func (h *Handler) ApplyArtwork(w http.ResponseWriter, r *http.Request) {
+	var req ApplyArtworkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.SourceTrackID == "" {
+		h.respondError(w, http.StatusBadRequest, "Source track ID is required")
+		return
+	}
+
+	if len(req.TargetTrackIDs) == 0 {
+		h.respondError(w, http.StatusBadRequest, "No target track IDs provided")
+		return
+	}
+
+	results, err := h.artworkManager.ApplyArtworkToTracks(r.Context(), req.SourceTrackID, req.TargetTrackIDs)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"results": results,
+	})
+}
+
+func (h *Handler) GetArtworkSuggestions(w http.ResponseWriter, r *http.Request) {
+	trackID := chi.URLParam(r, "id")
+
+	suggestions, err := h.artworkManager.GetSuggestions(r.Context(), trackID)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, suggestions)
 }
 
 // Health check
