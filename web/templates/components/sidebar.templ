@@ -1,7 +1,11 @@
 package components
 
 templ Sidebar() {
-	<aside class="fixed left-0 top-0 h-screen w-64 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 z-40 flex flex-col">
+	<aside
+		class="fixed left-0 top-0 h-screen w-64 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 z-40 flex flex-col transition-transform duration-200 ease-in-out md:translate-x-0"
+		:class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+		@click.away="sidebarOpen = false"
+	>
 		<!-- Logo -->
 		<div class="p-6 border-b border-gray-200/50 dark:border-gray-800/50">
 			<a href="/" class="flex items-center gap-3">

@@ -45,6 +45,11 @@
   --border-secondary: rgba(255, 255, 255, 0.05);
 }
 
+/* Alpine.js cloak */
+[x-cloak] {
+  display: none !important;
+}
+
 /* Base Styles */
 * {
   -webkit-font-smoothing: antialiased;
