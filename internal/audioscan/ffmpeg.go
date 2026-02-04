@@ -16,7 +16,9 @@ import (
 func (s *Scanner) extractSpectrumCurve(ctx context.Context, path string, fftSize int, duration float64) ([]float32, []float32, error) {
 	// Use FFmpeg's astats filter to get frequency-domain data
 	// We'll use showfreqs filter which outputs frequency bins
+	// -loglevel verbose is required for FFmpeg 7.x to output per-frame stats
 	args := []string{
+		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
 		"-af", fmt.Sprintf("aformat=sample_fmts=flt:channel_layouts=mono,showfreqs=s=%dx100:mode=line:fscale=log:win_size=%d", fftSize/2, fftSize),
@@ -115,7 +117,9 @@ func (s *Scanner) calculateDC(ctx context.Context, path string, duration float64
 // extractLoudnessSeries uses FFmpeg ebur128 filter for loudness over time
 func (s *Scanner) extractLoudnessSeries(ctx context.Context, path string, duration float64) (*LoudnessSeries, error) {
 	// Use ebur128 filter with metadata output
+	// -loglevel verbose is required for FFmpeg 7.x to output per-frame M:/S: values
 	args := []string{
+		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
 		"-af", "ebur128=peak=true:metadata=1",
@@ -135,60 +139,89 @@ func (s *Scanner) extractLoudnessSeries(ctx context.Context, path string, durati
 
 	series := &LoudnessSeries{
 		Version:   RawDataVersion,
-		WindowSec: 0.4, // Momentary loudness window
+		WindowSec: 0.1, // 100ms window based on FFmpeg output
 	}
 
 	// Parse ebur128 output
 	lines := strings.Split(output, "\n")
 
-	momentaryPattern := regexp.MustCompile(`M:\s*([-\d.]+)`)
-	shortTermPattern := regexp.MustCompile(`S:\s*([-\d.]+)`)
-	integratedPattern := regexp.MustCompile(`I:\s*([-\d.]+)`)
+	// FFmpeg 7.x format: [Parsed_ebur128_0 @ ...] t: 0.0999773  TARGET:-23 LUFS    M:-120.7 S:-120.7     I: -70.0 LUFS ...
+	timePattern := regexp.MustCompile(`t:\s*([\d.]+)`)
+	momentaryPattern := regexp.MustCompile(`M:\s*([-\d.inf]+)`)
+	shortTermPattern := regexp.MustCompile(`S:\s*([-\d.inf]+)`)
+	integratedPattern := regexp.MustCompile(`I:\s*([-\d.]+)\s*LUFS`)
 	lraPattern := regexp.MustCompile(`LRA:\s*([-\d.]+)`)
-	truePeakPattern := regexp.MustCompile(`Peak:\s*([-\d.]+)`)
+	// TPK: -11.1 -24.6 dBFS (true peak per channel, take max)
+	truePeakPattern := regexp.MustCompile(`TPK:\s*([-\d.inf]+)\s+([-\d.inf]+)`)
+	// Summary section Peak:
+	summaryPeakPattern := regexp.MustCompile(`Peak:\s*([-\d.]+)\s*dBFS`)
 
-	var t float32 = 0
 	for _, line := range lines {
-		if strings.Contains(line, "[Parsed_ebur128") {
+		if strings.Contains(line, "[Parsed_ebur128") && strings.Contains(line, "t:") {
+			// Extract time
+			if tm := timePattern.FindStringSubmatch(line); len(tm) > 1 {
+				if t, err := strconv.ParseFloat(tm[1], 32); err == nil {
+					series.TSec = append(series.TSec, float32(t))
+				}
+			}
+
 			// Extract momentary loudness
 			if m := momentaryPattern.FindStringSubmatch(line); len(m) > 1 {
-				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
-					series.TSec = append(series.TSec, t)
+				if m[1] == "-inf" {
+					series.MomentaryLUFS = append(series.MomentaryLUFS, -120.0)
+				} else if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 					series.MomentaryLUFS = append(series.MomentaryLUFS, float32(v))
-					t += float32(series.WindowSec)
 				}
 			}
 
 			// Extract short-term
 			if m := shortTermPattern.FindStringSubmatch(line); len(m) > 1 {
-				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+				if m[1] == "-inf" {
+					series.ShortTermLUFS = append(series.ShortTermLUFS, -120.0)
+				} else if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 					series.ShortTermLUFS = append(series.ShortTermLUFS, float32(v))
 				}
 			}
 
-			// Extract true peak
-			if m := truePeakPattern.FindStringSubmatch(line); len(m) > 1 {
-				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
-					series.TruePeakDbTP = append(series.TruePeakDbTP, float32(v))
-					if float32(v) > series.MaxTruePeak {
-						series.MaxTruePeak = float32(v)
+			// Extract true peak (take max of L/R channels)
+			if m := truePeakPattern.FindStringSubmatch(line); len(m) > 2 {
+				var peak float32 = -120.0
+				for _, s := range m[1:3] {
+					if s == "-inf" {
+						continue
 					}
+					if v, err := strconv.ParseFloat(s, 32); err == nil && float32(v) > peak {
+						peak = float32(v)
+					}
+				}
+				series.TruePeakDbTP = append(series.TruePeakDbTP, peak)
+				if peak > series.MaxTruePeak {
+					series.MaxTruePeak = peak
 				}
 			}
 		}
 
-		// Parse summary values
-		if strings.Contains(line, "Integrated loudness:") || strings.Contains(line, "I:") {
+		// Parse summary values (from Summary: section)
+		if strings.Contains(line, "I:") && strings.Contains(line, "LUFS") && !strings.Contains(line, "t:") {
 			if m := integratedPattern.FindStringSubmatch(line); len(m) > 1 {
 				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 					series.IntegratedLUFS = float32(v)
 				}
 			}
 		}
-		if strings.Contains(line, "Loudness range:") || strings.Contains(line, "LRA:") {
+		if strings.Contains(line, "LRA:") && strings.Contains(line, "LU") && !strings.Contains(line, "t:") {
 			if m := lraPattern.FindStringSubmatch(line); len(m) > 1 {
 				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 					series.LRA = float32(v)
+				}
+			}
+		}
+		if strings.Contains(line, "Peak:") && strings.Contains(line, "dBFS") {
+			if m := summaryPeakPattern.FindStringSubmatch(line); len(m) > 1 {
+				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+					if float32(v) > series.MaxTruePeak {
+						series.MaxTruePeak = float32(v)
+					}
 				}
 			}
 		}
@@ -204,7 +237,9 @@ func (s *Scanner) extractLoudnessSeries(ctx context.Context, path string, durati
 // extractClippingSeries detects clipping over time
 func (s *Scanner) extractClippingSeries(ctx context.Context, path string, duration float64) (*ClippingSeries, error) {
 	// Use astats to detect clipping
+	// -loglevel verbose is required for FFmpeg 7.x to output per-frame stats
 	args := []string{
+		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
 		"-af", "astats=metadata=1:reset=1",
@@ -273,7 +308,9 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 // extractPhaseSeries analyzes stereo phase correlation
 func (s *Scanner) extractPhaseSeries(ctx context.Context, path string, duration float64) (*PhaseSeries, error) {
 	// Use stereotools filter for phase analysis
+	// -loglevel verbose is required for FFmpeg 7.x to output per-frame stats
 	args := []string{
+		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
 		"-af", "stereotools=mlev=1:slev=1:phasef=0.5,astats=metadata=1:reset=1",
@@ -337,7 +374,9 @@ func (s *Scanner) extractPhaseSeries(ctx context.Context, path string, duration 
 // extractDynamicsSeries analyzes dynamics over time
 func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, duration float64) (*DynamicsSeries, error) {
 	// Use astats for RMS and peak analysis
+	// -loglevel verbose is required for FFmpeg 7.x to output per-frame stats
 	args := []string{
+		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
 		"-af", "astats=metadata=1:reset=1",
