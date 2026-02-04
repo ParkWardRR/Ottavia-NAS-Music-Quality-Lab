@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -14,21 +13,11 @@ import (
 )
 
 func main() {
-	// Start the server in background
-	serverCmd := exec.Command("./bin/ottavia", "-debug")
-	serverCmd.Stdout = os.Stdout
-	serverCmd.Stderr = os.Stderr
-	if err := serverCmd.Start(); err != nil {
-		log.Printf("Note: Server may already be running or binary not built")
+	// Get base URL from environment or default
+	baseURL := os.Getenv("OTTAVIA_URL")
+	if baseURL == "" {
+		baseURL = "http://ottavia" // Default to remote server
 	}
-	defer func() {
-		if serverCmd.Process != nil {
-			serverCmd.Process.Kill()
-		}
-	}()
-
-	// Wait for server to start
-	time.Sleep(2 * time.Second)
 
 	// Install playwright browsers
 	if err := playwright.Install(); err != nil {
@@ -57,6 +46,12 @@ func main() {
 		log.Fatalf("could not create screenshots dir: %v", err)
 	}
 
+	// Get a track ID for the track detail page
+	trackID := os.Getenv("OTTAVIA_TRACK_ID")
+	if trackID == "" {
+		trackID = "6b6e7b79-eb0d-457e-b890-a72e7dd8bdd3" // Default track ID
+	}
+
 	// Screenshots to capture
 	screenshots := []struct {
 		name     string
@@ -65,14 +60,17 @@ func main() {
 		height   int
 		darkMode bool
 		wait     time.Duration
+		fullPage bool
 	}{
-		{"dashboard-light", "/", 1920, 1080, false, 500 * time.Millisecond},
-		{"dashboard-dark", "/", 1920, 1080, true, 500 * time.Millisecond},
-		{"tracks-light", "/tracks", 1920, 1080, false, 500 * time.Millisecond},
-		{"tracks-dark", "/tracks", 1920, 1080, true, 500 * time.Millisecond},
-		{"settings-light", "/settings", 1920, 1080, false, 500 * time.Millisecond},
-		{"settings-dark", "/settings", 1920, 1080, true, 500 * time.Millisecond},
-		{"dashboard-mobile", "/", 375, 812, false, 500 * time.Millisecond},
+		{"dashboard-light", "/", 1920, 1080, false, 500 * time.Millisecond, false},
+		{"dashboard-dark", "/", 1920, 1080, true, 500 * time.Millisecond, false},
+		{"tracks-light", "/tracks", 1920, 1080, false, 500 * time.Millisecond, false},
+		{"tracks-dark", "/tracks", 1920, 1080, true, 500 * time.Millisecond, false},
+		{"track-detail-light", "/tracks/" + trackID, 1920, 1400, false, 500 * time.Millisecond, true},
+		{"track-detail-dark", "/tracks/" + trackID, 1920, 1400, true, 500 * time.Millisecond, true},
+		{"settings-light", "/settings", 1920, 1080, false, 500 * time.Millisecond, false},
+		{"settings-dark", "/settings", 1920, 1080, true, 500 * time.Millisecond, false},
+		{"dashboard-mobile", "/", 375, 812, false, 500 * time.Millisecond, false},
 	}
 
 	for _, s := range screenshots {
@@ -105,7 +103,7 @@ func main() {
 		}
 
 		// Navigate to page
-		_, err = page.Goto(fmt.Sprintf("http://localhost:8080%s", s.path), playwright.PageGotoOptions{
+		_, err = page.Goto(fmt.Sprintf("%s%s", baseURL, s.path), playwright.PageGotoOptions{
 			WaitUntil: playwright.WaitUntilStateNetworkidle,
 		})
 		if err != nil {
@@ -130,7 +128,7 @@ func main() {
 		screenshotPath := filepath.Join(screenshotsDir, fmt.Sprintf("%s.png", s.name))
 		_, err = page.Screenshot(playwright.PageScreenshotOptions{
 			Path:     playwright.String(screenshotPath),
-			FullPage: playwright.Bool(false),
+			FullPage: playwright.Bool(s.fullPage),
 		})
 		if err != nil {
 			log.Printf("Error taking screenshot %s: %v", s.name, err)
