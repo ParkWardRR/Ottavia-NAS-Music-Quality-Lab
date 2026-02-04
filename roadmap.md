@@ -110,14 +110,71 @@
 - [x] Reset zoom button
 - [ ] Spectrogram heatmap from raw matrix (future enhancement)
 
+## Phase 9 — Verbose Job Logging & Bulk Operations ✅ COMPLETE
+- [x] In-memory job logging system with per-job log storage
+- [x] Real-time verbose log streaming via API polling
+- [x] Job log API endpoints (`/api/jobs/{id}/logs`, `/api/jobs/logs`)
+- [x] Log levels (info, debug, warn, error) with timestamps
+- [x] Module-specific logging (spectrum, loudness, clipping, phase, dynamics)
+- [x] Bulk audio scan endpoint (`/api/audioscan/bulk`)
+- [x] Library-wide and track-filtered bulk scan support
+- [x] Real-time log viewer panel in Audio Scan UI
+- [x] Alpine.js-powered log streaming with auto-scroll
+- [x] Job status tracking (running, completed, failed)
+- [x] Automatic log cleanup (configurable max jobs, default 100)
+- [x] Rich log details for debugging (FFmpeg commands, file paths, errors)
+- [x] Integration with existing job queue worker infrastructure
+
+**Key Files Modified for Phase 9:**
+| File | Changes |
+|------|---------|
+| `internal/jobs/logger.go` | New in-memory logging system |
+| `internal/jobs/worker.go` | Integrated logger into job processing |
+| `internal/audioscan/scanner.go` | Added `JobLogger` interface + verbose logging variants |
+| `internal/handlers/handlers.go` | Added job log API endpoints + bulk scan handler |
+| `cmd/server/main.go` | Registered new API routes |
+| `web/templates/pages/tracks.templ` | Added real-time log viewer panel |
+
+## Phase 10 — Future Enhancements (Planned)
+- [ ] Spectrogram heatmap from raw matrix (visual FFT over time)
+- [ ] MusicBrainz integration (MBID/ISRC lookup)
+- [ ] Acoustic fingerprinting (AcoustID integration)
+- [ ] Batch export of analysis reports (PDF/HTML)
+- [ ] WebSocket streaming for real-time log updates
+- [ ] Playlist management and smart playlists
+- [ ] Duplicate detection across libraries
+- [ ] Automated cleanup workflows
+- [ ] Mobile companion app (PWA)
+
 ## Testing & Documentation ✅ MOSTLY COMPLETE
 - [x] Playwright-go E2E test setup
 - [x] Screenshot generation with real music data
 - [x] Professional README with badges and screenshots
 - [x] API documentation with examples
 - [x] Track detail screenshots showing pro-level analysis
+- [x] Architecture diagrams in README
+- [x] Audio analysis module documentation
 - [ ] Unit test coverage (>80% target)
 - [ ] Contributing guide
+
+---
+
+## Progress Summary
+
+| Phase | Status | Completion |
+|-------|--------|------------|
+| Phase 0 - Foundations | ✅ Complete | 100% |
+| Phase 1 - Scanner MVP | ✅ Complete | 100% |
+| Phase 2 - Probe + Tests | ✅ Complete | 100% |
+| Phase 3 - Lossy Detection | ✅ Complete | 100% |
+| Phase 4 - Metadata Editor | ✅ Complete | 95% |
+| Phase 5 - Conversion Queue | ✅ Mostly Complete | 80% |
+| Phase 6 - Hardening | 🔄 In Progress | 40% |
+| Phase 7 - Audio Scan | ✅ Complete | 100% |
+| Phase 8 - Dynamic Charts | ✅ Complete | 95% |
+| Phase 9 - Verbose Logging | ✅ Complete | 100% |
+
+**Overall Progress: ~90%**
 
 ---
 
@@ -228,6 +285,56 @@
 
 **UI Integration:**
 - Dynamic Alpine.js panels that load manifest on page view
-- Each panel shows PNG chart + key metrics
+- Each panel shows interactive chart + key metrics
 - "Download raw data" links for advanced analysis
 - "Run Audio Scan" button when analysis not yet performed
+
+### Verbose Job Logging & Bulk Operations System
+A comprehensive real-time logging system for tracking audio scan progress with detailed diagnostics.
+
+**Logging Infrastructure (`internal/jobs/logger.go`):**
+- Thread-safe in-memory log storage with mutex protection
+- Per-job log entries with timestamps, levels, modules, and details
+- Automatic cleanup of old logs (configurable max, default 100 jobs)
+- Log levels: `info`, `debug`, `warn`, `error`
+- Module tagging for easy filtering (spectrum, loudness, clipping, phase, dynamics)
+
+**Log Entry Structure:**
+```json
+{
+  "timestamp": "2026-02-04T10:30:00Z",
+  "level": "info",
+  "module": "spectrum",
+  "message": "FFT analysis complete",
+  "details": "Detected bandwidth: 20000Hz, DC offset: 0.001"
+}
+```
+
+**API Endpoints:**
+- `GET /api/jobs/logs` - List recent job logs (summary view)
+- `GET /api/jobs/{id}/logs` - Get full log for specific job
+- `GET /api/jobs/{id}/logs?since={index}` - Stream new entries since index
+- `POST /api/audioscan/bulk` - Trigger bulk audio scan
+
+**Bulk Audio Scan:**
+- Scan all tracks in a library with one request
+- Filter by library ID or scan entire collection
+- Jobs queued individually for parallel processing
+- Returns job IDs for tracking progress
+- Request body: `{"libraryId": "optional-library-id"}`
+
+**Real-Time Log Viewer:**
+- Alpine.js component with 500ms polling interval
+- Auto-scroll with manual scroll detection
+- Color-coded log levels (green=info, gray=debug, yellow=warn, red=error)
+- Module badges for quick identification
+- Expandable details section for debug info
+- "Clear Log" and manual refresh controls
+- Status indicator (running, completed, failed)
+
+**Integration Points:**
+- `ScanTrackWithLogger()` - Track scanning with verbose logging
+- Each analysis module logs start, progress, and completion
+- FFmpeg command details logged at debug level
+- Error stack traces captured for failed jobs
+- Worker pool automatically logs job lifecycle events
