@@ -19,6 +19,7 @@ import (
 
 	"github.com/ottavia-music/ottavia/internal/analyzer"
 	"github.com/ottavia-music/ottavia/internal/artwork"
+	"github.com/ottavia-music/ottavia/internal/audioscan"
 	"github.com/ottavia-music/ottavia/internal/config"
 	"github.com/ottavia-music/ottavia/internal/database"
 	"github.com/ottavia-music/ottavia/internal/handlers"
@@ -85,11 +86,23 @@ func main() {
 	metadataWriter := metadata.New(db, cfg.FFmpeg.FFmpegPath)
 	artworkManager := artwork.New(db, cfg.FFmpeg.FFmpegPath, cfg.Storage.ArtifactsPath)
 
+	// Initialize audio scan scanner
+	audioScanConfig := audioscan.Config{
+		MaxDurationSec: 60.0, // Analyze first 60 seconds by default
+		FFmpegPath:     cfg.FFmpeg.FFmpegPath,
+		FFprobePath:    cfg.FFmpeg.FFprobePath,
+		ArtifactsPath:  cfg.Storage.ArtifactsPath,
+	}
+	audioScanner := audioscan.NewScanner(db, audioScanConfig)
+
 	// Initialize handlers
 	h := handlers.New(db, scannerSvc, analyzerSvc, metadataWriter, artworkManager)
 
+	// Initialize audio scan API handler for dynamic series endpoints
+	audioScanAPI := audioscan.NewAPIHandler(audioScanner)
+
 	// Start job workers
-	worker := jobs.NewWorker(db, analyzerSvc, cfg.Scanner.WorkerCount)
+	worker := jobs.NewWorker(db, analyzerSvc, audioScanner, cfg.Scanner.WorkerCount)
 	worker.Start(context.Background())
 	defer worker.Stop()
 
@@ -181,6 +194,14 @@ func main() {
 		r.Post("/artwork/{id}/upload", h.UploadArtwork)
 		r.Post("/artwork/apply", h.ApplyArtwork)
 		r.Get("/artwork/{id}/suggestions", h.GetArtworkSuggestions)
+
+		// Audio scan analysis
+		r.Get("/tracks/{id}/audioscan", h.GetAudioScanManifest)
+		r.Post("/tracks/{id}/audioscan", h.RunAudioScan)
+
+		// Dynamic series API (for interactive charts)
+		r.Get("/tracks/{id}/audioscan/manifest", audioScanAPI.GetManifest)
+		r.Get("/tracks/{id}/audioscan/series", audioScanAPI.GetSeries)
 
 		// Action logs
 		r.Get("/logs", h.ListActionLogs)

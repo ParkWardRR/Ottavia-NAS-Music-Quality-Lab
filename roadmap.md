@@ -49,10 +49,12 @@
 - [x] AI-powered artwork suggestions for similar tracks
 - [ ] Optional ID lookup (add MBIDs/ISRCs with manual confirmation)
 
-## Phase 5 — Conversion queue 🔄 IN PROGRESS
+## Phase 5 — Conversion queue ✅ MOSTLY COMPLETE
 - [x] Conversion profiles (iPod/Red Book compatible targets)
 - [x] Queue + worker infrastructure (shared with analysis jobs)
 - [x] Dedicated conversion progress UI with logs
+- [x] Separate output directory support (configurable per-library)
+- [x] Source directory protection (read-only mode, never modifies originals)
 - [ ] Retry handling with exponential backoff
 - [ ] Provenance tracking (output files link back to source + profile + timestamp)
 - [ ] Post-conversion re-scan (validate outputs and attach evidence)
@@ -69,6 +71,45 @@
 - [ ] Performance tuning (NAS-friendly IO patterns, memory optimization)
 - [ ] Security hardening (RBAC, optional OIDC, audit log export)
 
+## Phase 7 — Audio Scan-style Analysis ✅ COMPLETE
+- [x] Analysis manifest infrastructure (analysis_manifest_v1.json per track)
+- [x] Artifact standardization with versioned schemas
+- [x] Audio Scan-style spectrum curve (raw msgpack.zst)
+- [x] Loudness series graphs (momentary/short-term LUFS timeline)
+- [x] Clipping/overs series graphs (per-window detection)
+- [x] Dynamics segmentation graphs (DR/crest factor series)
+- [x] Phase/correlation series graphs (stereo correlation timeline)
+- [x] MessagePack + Zstd compression for raw data storage
+- [x] SHA256 hashes in manifest for artifact integrity
+- [x] Dynamic UI panels with Alpine.js
+- [x] "Download raw data" links for each analysis module
+- [x] Expected vs Detected quality classification
+- [x] Bandwidth detection from spectrum analysis
+- [x] DC offset detection and flagging
+- [x] Nyquist and guide line computation from probe cache
+- [x] Configurable analysis duration (default: first 60 seconds)
+- [x] Job queue integration for audio scan jobs
+- [x] Interactive/zoomable charts using raw data
+- [ ] Spectrogram matrix storage with manifest pattern
+
+## Phase 8 — Dynamic Evidence Graphs (no PNG) ✅ COMPLETE
+- [x] Remove PNG artifact pipeline (no PNG generation or storage)
+- [x] JSON series endpoints with decimation (`/api/tracks/{id}/audioscan/series`)
+- [x] LTTB (Largest-Triangle-Three-Buckets) downsampling algorithm
+- [x] Min/max envelope decimation for peak preservation
+- [x] RenderHints from probe cache (nyquistHz, guideLinesHz, axis ranges)
+- [x] Canvas-based interactive chart renderer (`ottavia-charts.js`)
+- [x] Pan/zoom support via drag and mousewheel
+- [x] Hover tooltip with crosshair
+- [x] Dark/light mode theme support
+- [x] Responsive canvas with high-DPI support
+- [x] Guide lines for Nyquist and frequency markers
+- [x] Module-specific chart panels on Track Detail page
+- [x] Skeleton loading state while fetching series
+- [x] Download JSON button for each chart
+- [x] Reset zoom button
+- [ ] Spectrogram heatmap from raw matrix (future enhancement)
+
 ## Testing & Documentation ✅ MOSTLY COMPLETE
 - [x] Playwright-go E2E test setup
 - [x] Screenshot generation with real music data
@@ -81,6 +122,12 @@
 ---
 
 ## Recent Accomplishments (Feb 2026)
+
+### Output Directory Separation
+- Libraries support separate output paths for conversion work
+- Source directories are never modified (read-only mode)
+- All conversion outputs go to user-configurable output directory
+- Clean separation: `/mnt/music/Complete` (source, read-only) → `/mnt/music/Output` (conversions)
 
 ### Album Art Manager
 - Dedicated album art management page
@@ -136,3 +183,51 @@
 - Systemd service for automatic startup
 - Successfully scanning large music libraries (1500+ tracks)
 - 4 worker threads for parallel analysis
+
+### Dynamic Evidence Graphs System
+- Fully dynamic, interactive browser-rendered charts (no PNG artifacts)
+- JSON series API with efficient decimation (LTTB + min/max envelope)
+- Canvas-based chart renderer with pan/zoom/tooltip support
+- RenderHints computed from track's probe cache (never hard-coded)
+- Dark/light mode support with responsive high-DPI rendering
+
+### Audio Scan-style Analysis System
+- Comprehensive audio analysis inspired by Audirvāna's Audio Scan feature
+- Per-track analysis manifest (analysis_manifest_v1.json) as source of truth
+- Raw data storage in MessagePack format with Zstd compression
+- Dynamic charts replace static PNG images
+
+**Spectrum Analysis Module:**
+- FFT-based frequency spectrum curve generation
+- Expected quality tier derived from probe cache (Hi-Res/Studio/CD Quality/Lossy)
+- Detected quality classification with bandwidth analysis
+- DC offset detection with configurable threshold
+- Nyquist guide lines computed from track's sample rate
+
+**Loudness Analysis Module:**
+- Momentary and short-term LUFS timeline
+- Integrated loudness (scalar)
+- Loudness Range (LRA)
+- True peak and sample peak tracking
+
+**Clipping Detection Module:**
+- Per-window clipped sample counts
+- True-peak overs detection (samples exceeding 0 dBTP)
+- Visual timeline of worst clipping sections
+
+**Phase Correlation Module:**
+- Stereo correlation timeline (-1 to +1)
+- L/R balance tracking
+- Phase issue detection (persistent negative correlation)
+- Automatic skip for mono tracks
+
+**Dynamics Segmentation Module:**
+- Per-segment DR scoring
+- Crest factor analysis
+- Visual identification of "crushed" sections
+
+**UI Integration:**
+- Dynamic Alpine.js panels that load manifest on page view
+- Each panel shows PNG chart + key metrics
+- "Download raw data" links for advanced analysis
+- "Run Audio Scan" button when analysis not yet performed

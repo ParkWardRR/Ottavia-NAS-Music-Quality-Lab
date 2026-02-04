@@ -95,10 +95,20 @@ Are your "lossless" files actually lossless? Many FLAC and ALAC files in the wil
 - AI-powered suggestions for similar tracks
 - Smart matching by album name and artist
 
+### Dynamic Audio Analysis (Audio Scan-style)
+- Interactive, zoomable charts rendered in the browser
+- Spectrum analysis with frequency bandwidth detection
+- Loudness timeline (momentary/short-term LUFS)
+- Clipping detection with visual timeline
+- Phase correlation analysis for stereo tracks
+- Dynamics segmentation with per-section DR scores
+- Raw data export (MessagePack + Zstd compressed)
+
 ### Format Conversion
 - Built-in profiles (iPod-compatible, CD quality, high-res)
 - Queue-based processing with progress tracking
 - Provenance tracking (link output to source + profile)
+- Separate output directory support (never modifies source files)
 
 ### Modern UI
 - Clean Apple-inspired glassmorphism design
@@ -112,6 +122,8 @@ Are your "lossless" files actually lossless? Many FLAC and ALAC files in the wil
 - Low resource footprint
 - Tested on Synology, QNAP, Unraid, TrueNAS
 - Works on AlmaLinux, Ubuntu, Debian, macOS
+- Read-only source support (never modifies your original files)
+- Configurable output directory for conversions
 
 ---
 
@@ -379,9 +391,11 @@ POST /api/tracks/bulk/apply
 - [x] **Phase 1**: Library scanner with job queue
 - [x] **Phase 2**: FFprobe integration + audio analysis
 - [x] **Phase 3**: Lossy detection + DR scoring + album consistency
-- [x] **Phase 4**: Metadata editor + bulk operations
+- [x] **Phase 4**: Metadata editor + bulk operations + album art manager
 - [x] **Phase 5**: Conversion queue + progress UI
 - [ ] **Phase 6**: Hardening + security (RBAC, backups)
+- [x] **Phase 7**: Audio Scan-style analysis with raw data manifests
+- [x] **Phase 8**: Dynamic evidence graphs (interactive canvas charts)
 
 See [roadmap.md](roadmap.md) for detailed progress.
 
