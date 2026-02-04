@@ -1,7 +1,6 @@
 package audioscan
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -236,13 +235,13 @@ func (s *Scanner) extractLoudnessSeries(ctx context.Context, path string, durati
 
 // extractClippingSeries detects clipping over time
 func (s *Scanner) extractClippingSeries(ctx context.Context, path string, duration float64) (*ClippingSeries, error) {
-	// Use astats to detect clipping
-	// -loglevel verbose is required for FFmpeg 7.x to output per-frame stats
+	// Use astats with ametadata to get per-frame peak levels
+	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
 	args := []string{
 		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "astats=metadata=1:reset=1",
+		"-af", "astats=metadata=1:measure_perchannel=Peak_level:measure_overall=none,ametadata=print",
 		"-f", "null",
 		"-",
 	}
@@ -256,48 +255,59 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 
 	series := &ClippingSeries{
 		Version:       RawDataVersion,
-		ThresholdDbFS: 0.0,
+		ThresholdDbFS: -0.1, // Slightly below 0 to catch near-clipping
 	}
 
-	// Parse astats output for clipping information
-	clippedPattern := regexp.MustCompile(`Number of samples:\s*(\d+)`)
-	peakPattern := regexp.MustCompile(`Peak level dB:\s*([-\d.]+)`)
+	// Parse ametadata output for per-frame peak levels
+	// Format: lavfi.astats.1.Peak_level=-18.063656
+	framePattern := regexp.MustCompile(`frame:\d+\s+pts:\d+\s+pts_time:([\d.]+)`)
+	peakPattern := regexp.MustCompile(`lavfi\.astats\.\d+\.Peak_level=([-\d.inf]+)`)
 
 	lines := strings.Split(output, "\n")
-	var t float32 = 0
-	windowSec := float32(0.5) // 500ms windows
+	var currentTime float32 = 0
+	var maxPeak float32 = -100
 
 	for _, line := range lines {
-		if strings.Contains(line, "Peak level") {
-			if m := peakPattern.FindStringSubmatch(line); len(m) > 1 {
-				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
-					series.TSec = append(series.TSec, t)
-					// Count as clipped if peak >= 0 dBFS
+		// Extract timestamp from frame line
+		if m := framePattern.FindStringSubmatch(line); len(m) > 1 {
+			if t, err := strconv.ParseFloat(m[1], 32); err == nil {
+				currentTime = float32(t)
+			}
+		}
+
+		// Extract peak level
+		if m := peakPattern.FindStringSubmatch(line); len(m) > 1 {
+			if m[1] == "-inf" || m[1] == "inf" {
+				continue
+			}
+			if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+				peak := float32(v)
+				if peak > maxPeak {
+					maxPeak = peak
+				}
+
+				// Only add data point if we have enough time spacing (avoid duplicates)
+				if len(series.TSec) == 0 || currentTime-series.TSec[len(series.TSec)-1] >= 0.02 {
+					series.TSec = append(series.TSec, currentTime)
+
+					// Count as clipped if peak >= threshold
 					clipped := 0
-					if v >= 0 {
+					if peak >= float32(series.ThresholdDbFS) {
 						clipped = 1
 						series.TotalClipped++
 					}
 					series.ClippedSamples = append(series.ClippedSamples, clipped)
-					series.OversCount = append(series.OversCount, 0) // Would need true peak analysis
-					t += windowSec
-				}
-			}
-		}
-		if strings.Contains(line, "clipped") {
-			if m := clippedPattern.FindStringSubmatch(line); len(m) > 1 {
-				if v, err := strconv.Atoi(m[1]); err == nil && v > 0 {
-					series.TotalClipped += v
+					series.OversCount = append(series.OversCount, 0)
 				}
 			}
 		}
 	}
 
 	// Find worst section
-	maxClipped := 0
+	maxClippedVal := 0
 	for i, c := range series.ClippedSamples {
-		if c > maxClipped {
-			maxClipped = c
+		if c > maxClippedVal {
+			maxClippedVal = c
 			series.WorstSectionIdx = i
 		}
 	}
@@ -307,13 +317,14 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 
 // extractPhaseSeries analyzes stereo phase correlation
 func (s *Scanner) extractPhaseSeries(ctx context.Context, path string, duration float64) (*PhaseSeries, error) {
-	// Use stereotools filter for phase analysis
-	// -loglevel verbose is required for FFmpeg 7.x to output per-frame stats
+	// Use aphasemeter for actual phase correlation measurement
+	// Combined with astats for L/R balance calculation
+	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
 	args := []string{
 		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "stereotools=mlev=1:slev=1:phasef=0.5,astats=metadata=1:reset=1",
+		"-af", "aphasemeter=video=0,astats=metadata=1:measure_perchannel=RMS_level:measure_overall=none,ametadata=print",
 		"-f", "null",
 		"-",
 	}
@@ -328,58 +339,120 @@ func (s *Scanner) extractPhaseSeries(ctx context.Context, path string, duration 
 	series := &PhaseSeries{
 		Version:        RawDataVersion,
 		MinCorrelation: 1.0,
-		AvgCorrelation: 1.0,
+		AvgCorrelation: 0.0,
 	}
 
-	// Parse phase correlation from output
-	// The stereotools filter doesn't directly output correlation, so we estimate from balance
-	balancePattern := regexp.MustCompile(`Crest factor:\s*([-\d.]+)`)
+	// Parse ametadata output for phase and RMS levels
+	framePattern := regexp.MustCompile(`frame:\d+\s+pts:\d+\s+pts_time:([\d.]+)`)
+	phasePattern := regexp.MustCompile(`lavfi\.aphasemeter\.phase=([-\d.]+)`)
+	rms1Pattern := regexp.MustCompile(`lavfi\.astats\.1\.RMS_level=([-\d.inf]+)`)
+	rms2Pattern := regexp.MustCompile(`lavfi\.astats\.2\.RMS_level=([-\d.inf]+)`)
 
 	lines := strings.Split(output, "\n")
-	var t float32 = 0
-	windowSec := float32(0.5)
+	var currentTime float32 = 0
+	var currentPhase float32 = 1.0
+	var rms1, rms2 float32 = -60, -60
 	var sum float32 = 0
 	count := 0
 
 	for _, line := range lines {
-		// For each stats block, estimate phase correlation
-		if strings.Contains(line, "RMS level") {
-			// Simplified: assume good correlation for now
-			// Real implementation would use aphasemeter filter
-			corr := float32(0.9 + 0.1*float32(count%10)/10) // Simulated variation
-			series.TSec = append(series.TSec, t)
-			series.Correlation = append(series.Correlation, corr)
-			series.LRBalanceDb = append(series.LRBalanceDb, 0) // Would need actual balance calc
+		// Extract timestamp from frame line
+		if m := framePattern.FindStringSubmatch(line); len(m) > 1 {
+			if t, err := strconv.ParseFloat(m[1], 32); err == nil {
+				// Save previous data point before updating time
+				if count > 0 && currentTime != float32(t) {
+					// Calculate L/R balance from RMS difference
+					balance := rms1 - rms2
 
-			sum += corr
-			count++
-			if corr < series.MinCorrelation {
-				series.MinCorrelation = corr
+					series.TSec = append(series.TSec, currentTime)
+					series.Correlation = append(series.Correlation, currentPhase)
+					series.LRBalanceDb = append(series.LRBalanceDb, balance)
+
+					sum += currentPhase
+					if currentPhase < series.MinCorrelation {
+						series.MinCorrelation = currentPhase
+					}
+				}
+				currentTime = float32(t)
+				count++
 			}
-			t += windowSec
 		}
 
-		if m := balancePattern.FindStringSubmatch(line); len(m) > 1 {
-			// Parse balance info if available
+		// Extract phase correlation
+		if m := phasePattern.FindStringSubmatch(line); len(m) > 1 {
+			if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+				currentPhase = float32(v)
+			}
+		}
+
+		// Extract RMS levels for L/R balance
+		if m := rms1Pattern.FindStringSubmatch(line); len(m) > 1 {
+			if m[1] != "-inf" && m[1] != "inf" {
+				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+					rms1 = float32(v)
+				}
+			}
+		}
+		if m := rms2Pattern.FindStringSubmatch(line); len(m) > 1 {
+			if m[1] != "-inf" && m[1] != "inf" {
+				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+					rms2 = float32(v)
+				}
+			}
 		}
 	}
 
-	if count > 0 {
-		series.AvgCorrelation = sum / float32(count)
+	// Add final data point
+	if count > 0 && len(series.TSec) == 0 || (len(series.TSec) > 0 && currentTime != series.TSec[len(series.TSec)-1]) {
+		series.TSec = append(series.TSec, currentTime)
+		series.Correlation = append(series.Correlation, currentPhase)
+		series.LRBalanceDb = append(series.LRBalanceDb, rms1-rms2)
+		sum += currentPhase
+		if currentPhase < series.MinCorrelation {
+			series.MinCorrelation = currentPhase
+		}
+	}
+
+	// Calculate average
+	if len(series.Correlation) > 0 {
+		series.AvgCorrelation = sum / float32(len(series.Correlation))
+	}
+
+	// Detect phase issues (persistent negative correlation)
+	negCount := 0
+	for _, c := range series.Correlation {
+		if c < 0 {
+			negCount++
+		}
+	}
+	series.PhaseIssue = negCount > len(series.Correlation)/4 // >25% negative = issue
+
+	// Max imbalance
+	for _, b := range series.LRBalanceDb {
+		if abs32(b) > abs32(series.MaxImbalanceDb) {
+			series.MaxImbalanceDb = b
+		}
 	}
 
 	return series, nil
 }
 
+func abs32(x float32) float32 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // extractDynamicsSeries analyzes dynamics over time
 func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, duration float64) (*DynamicsSeries, error) {
-	// Use astats for RMS and peak analysis
-	// -loglevel verbose is required for FFmpeg 7.x to output per-frame stats
+	// Use astats with ametadata for per-frame RMS, peak, and crest factor
+	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
 	args := []string{
 		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "astats=metadata=1:reset=1",
+		"-af", "astats=metadata=1:measure_perchannel=Peak_level+RMS_level+Crest_factor:measure_overall=none,ametadata=print",
 		"-f", "null",
 		"-",
 	}
@@ -396,56 +469,85 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 		MinCrestDb: 100,
 	}
 
-	rmsPattern := regexp.MustCompile(`RMS level dB:\s*([-\d.]+)`)
-	peakPattern := regexp.MustCompile(`Peak level dB:\s*([-\d.]+)`)
-	crestPattern := regexp.MustCompile(`Crest factor:\s*([-\d.]+)`)
+	// Parse ametadata output for per-frame dynamics
+	framePattern := regexp.MustCompile(`frame:\d+\s+pts:\d+\s+pts_time:([\d.]+)`)
+	peakPattern := regexp.MustCompile(`lavfi\.astats\.1\.Peak_level=([-\d.inf]+)`)
+	rmsPattern := regexp.MustCompile(`lavfi\.astats\.1\.RMS_level=([-\d.inf]+)`)
+	crestPattern := regexp.MustCompile(`lavfi\.astats\.1\.Crest_factor=([-\d.inf]+)`)
 
-	scanner := bufio.NewScanner(strings.NewReader(output))
-	var t float32 = 0
-	windowSec := float32(0.5)
+	lines := strings.Split(output, "\n")
+	var currentTime float32 = 0
+	var currentPeak, currentRMS, currentCrest float32 = -60, -60, 1
 	var sumCrest float32 = 0
 	count := 0
+	lastAddedTime := float32(-1)
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range lines {
+		// Extract timestamp from frame line
+		if m := framePattern.FindStringSubmatch(line); len(m) > 1 {
+			if t, err := strconv.ParseFloat(m[1], 32); err == nil {
+				// Add previous data point before updating time (if we have valid data)
+				if currentTime != lastAddedTime && currentCrest > 0 && currentRMS > -100 {
+					series.TSec = append(series.TSec, currentTime)
+					series.PeakDb = append(series.PeakDb, currentPeak)
+					series.RMSDb = append(series.RMSDb, currentRMS)
 
-		var rms, peak, crest float32
-		hasData := false
+					// Convert crest factor to dB
+					crestDb := float32(20 * math.Log10(float64(currentCrest)))
+					if math.IsInf(float64(crestDb), 0) || math.IsNaN(float64(crestDb)) {
+						crestDb = 0
+					}
+					series.CrestFactorDb = append(series.CrestFactorDb, crestDb)
 
-		if m := rmsPattern.FindStringSubmatch(line); len(m) > 1 {
-			if v, err := strconv.ParseFloat(m[1], 32); err == nil {
-				rms = float32(v)
-				hasData = true
+					sumCrest += crestDb
+					count++
+					if crestDb < series.MinCrestDb && crestDb > 0 {
+						series.MinCrestDb = crestDb
+					}
+					lastAddedTime = currentTime
+				}
+				currentTime = float32(t)
 			}
 		}
+
+		// Extract peak level
 		if m := peakPattern.FindStringSubmatch(line); len(m) > 1 {
-			if v, err := strconv.ParseFloat(m[1], 32); err == nil {
-				peak = float32(v)
-				hasData = true
+			if m[1] != "-inf" && m[1] != "inf" {
+				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+					currentPeak = float32(v)
+				}
 			}
 		}
+
+		// Extract RMS level
+		if m := rmsPattern.FindStringSubmatch(line); len(m) > 1 {
+			if m[1] != "-inf" && m[1] != "inf" {
+				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+					currentRMS = float32(v)
+				}
+			}
+		}
+
+		// Extract crest factor
 		if m := crestPattern.FindStringSubmatch(line); len(m) > 1 {
-			if v, err := strconv.ParseFloat(m[1], 32); err == nil {
-				crest = float32(v)
-				hasData = true
+			if m[1] != "-inf" && m[1] != "inf" {
+				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
+					currentCrest = float32(v)
+				}
 			}
 		}
+	}
 
-		if hasData && crest > 0 {
-			series.TSec = append(series.TSec, t)
-			series.RMSDb = append(series.RMSDb, rms)
-			series.PeakDb = append(series.PeakDb, peak)
-
-			// Convert crest factor to dB (crest = peak/rms ratio)
-			crestDb := float32(20 * math.Log10(float64(crest)))
+	// Add final data point
+	if currentTime != lastAddedTime && currentCrest > 0 && currentRMS > -100 {
+		series.TSec = append(series.TSec, currentTime)
+		series.PeakDb = append(series.PeakDb, currentPeak)
+		series.RMSDb = append(series.RMSDb, currentRMS)
+		crestDb := float32(20 * math.Log10(float64(currentCrest)))
+		if !math.IsInf(float64(crestDb), 0) && !math.IsNaN(float64(crestDb)) {
 			series.CrestFactorDb = append(series.CrestFactorDb, crestDb)
-
 			sumCrest += crestDb
 			count++
-			if crestDb < series.MinCrestDb {
-				series.MinCrestDb = crestDb
-			}
-			t += windowSec
 		}
 	}
 
@@ -459,6 +561,10 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 		if series.DRScore < 1 {
 			series.DRScore = 1
 		}
+	}
+
+	if series.MinCrestDb == 100 {
+		series.MinCrestDb = 0
 	}
 
 	return series, nil
