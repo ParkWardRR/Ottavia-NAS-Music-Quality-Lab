@@ -39,12 +39,12 @@
 - [x] Album page overhaul with album art, quality badges, and DR scores
 - [x] Album-level consistency view (spot outliers across an album)
 
-## Phase 4 — Metadata editor + audit 🔄 IN PROGRESS
+## Phase 4 — Metadata editor + audit ✅ MOSTLY COMPLETE
 - [x] Full metadata audit (missing/inconsistent tags, artwork checks)
 - [x] Tag display in track detail UI
 - [x] Artwork presence detection
 - [x] Safe write pipeline (atomic writes, action log, dry-run diffs)
-- [ ] Bulk operations (normalize album artist, fix track/disc numbering, artwork replace)
+- [x] Bulk operations (normalize album artist, fix track/disc numbering, set fields)
 - [ ] Optional ID lookup (add MBIDs/ISRCs with manual confirmation)
 
 ## Phase 5 — Conversion queue 🔄 IN PROGRESS

@@ -424,3 +424,272 @@ func (w *Writer) trackToMap(track *models.Track) map[string]interface{} {
 
 	return m
 }
+
+// BulkOperation represents a bulk operation request
+type BulkOperation struct {
+	TrackIDs  []string    `json:"trackIds"`
+	Operation string      `json:"operation"` // "normalize_album_artist", "fix_track_numbers", "set_field"
+	Value     interface{} `json:"value,omitempty"`
+	Field     string      `json:"field,omitempty"` // for "set_field" operation
+}
+
+// BulkResult represents the result of a bulk operation
+type BulkResult struct {
+	TotalTracks    int            `json:"totalTracks"`
+	SuccessCount   int            `json:"successCount"`
+	FailedCount    int            `json:"failedCount"`
+	Results        []WriteResult  `json:"results"`
+	ActionLogIDs   []string       `json:"actionLogIds,omitempty"`
+}
+
+// BulkPreview represents the preview of a bulk operation
+type BulkPreview struct {
+	TotalTracks  int            `json:"totalTracks"`
+	CanWriteAll  bool           `json:"canWriteAll"`
+	Previews     []WritePreview `json:"previews"`
+}
+
+// PreviewBulkOperation performs a dry run of a bulk operation
+func (w *Writer) PreviewBulkOperation(ctx context.Context, op *BulkOperation) (*BulkPreview, error) {
+	preview := &BulkPreview{
+		TotalTracks: len(op.TrackIDs),
+		CanWriteAll: true,
+		Previews:    []WritePreview{},
+	}
+
+	for _, trackID := range op.TrackIDs {
+		changes, err := w.operationToChanges(ctx, trackID, op)
+		if err != nil {
+			preview.Previews = append(preview.Previews, WritePreview{
+				TrackID:  trackID,
+				CanWrite: false,
+				Error:    err.Error(),
+			})
+			preview.CanWriteAll = false
+			continue
+		}
+
+		p, err := w.PreviewChanges(ctx, trackID, changes)
+		if err != nil {
+			preview.Previews = append(preview.Previews, WritePreview{
+				TrackID:  trackID,
+				CanWrite: false,
+				Error:    err.Error(),
+			})
+			preview.CanWriteAll = false
+			continue
+		}
+
+		preview.Previews = append(preview.Previews, *p)
+		if !p.CanWrite {
+			preview.CanWriteAll = false
+		}
+	}
+
+	return preview, nil
+}
+
+// ApplyBulkOperation applies a bulk operation to multiple tracks
+func (w *Writer) ApplyBulkOperation(ctx context.Context, op *BulkOperation, actor string) (*BulkResult, error) {
+	result := &BulkResult{
+		TotalTracks:  len(op.TrackIDs),
+		SuccessCount: 0,
+		FailedCount:  0,
+		Results:      []WriteResult{},
+		ActionLogIDs: []string{},
+	}
+
+	for _, trackID := range op.TrackIDs {
+		changes, err := w.operationToChanges(ctx, trackID, op)
+		if err != nil {
+			result.Results = append(result.Results, WriteResult{
+				TrackID: trackID,
+				Success: false,
+				Error:   err.Error(),
+			})
+			result.FailedCount++
+			continue
+		}
+
+		r, err := w.ApplyChanges(ctx, trackID, changes, actor)
+		if err != nil {
+			result.Results = append(result.Results, WriteResult{
+				TrackID: trackID,
+				Success: false,
+				Error:   err.Error(),
+			})
+			result.FailedCount++
+			continue
+		}
+
+		result.Results = append(result.Results, *r)
+		if r.Success {
+			result.SuccessCount++
+			if r.ActionLogID != "" {
+				result.ActionLogIDs = append(result.ActionLogIDs, r.ActionLogID)
+			}
+		} else {
+			result.FailedCount++
+		}
+	}
+
+	return result, nil
+}
+
+// operationToChanges converts a bulk operation to TagChanges for a specific track
+func (w *Writer) operationToChanges(ctx context.Context, trackID string, op *BulkOperation) (*TagChanges, error) {
+	switch op.Operation {
+	case "normalize_album_artist":
+		return w.normalizeAlbumArtistChanges(ctx, trackID, op.Value)
+	case "fix_track_numbers":
+		return w.fixTrackNumberChanges(ctx, trackID, op)
+	case "set_field":
+		return w.setFieldChanges(op.Field, op.Value)
+	default:
+		return nil, fmt.Errorf("unknown operation: %s", op.Operation)
+	}
+}
+
+// normalizeAlbumArtistChanges creates changes to normalize album artist
+func (w *Writer) normalizeAlbumArtistChanges(ctx context.Context, trackID string, value interface{}) (*TagChanges, error) {
+	albumArtist, ok := value.(string)
+	if !ok {
+		// If no value provided, try to determine from track
+		track, err := w.db.GetTrack(ctx, trackID)
+		if err != nil {
+			return nil, err
+		}
+		if track.AlbumArtist.Valid && track.AlbumArtist.String != "" {
+			albumArtist = track.AlbumArtist.String
+		} else if track.Artist.Valid {
+			albumArtist = track.Artist.String
+		} else {
+			return nil, fmt.Errorf("cannot determine album artist")
+		}
+	}
+
+	return &TagChanges{
+		AlbumArtist: &albumArtist,
+	}, nil
+}
+
+// fixTrackNumberChanges creates changes for track number fixing
+func (w *Writer) fixTrackNumberChanges(ctx context.Context, trackID string, op *BulkOperation) (*TagChanges, error) {
+	// Find the position of this track in the list
+	for i, id := range op.TrackIDs {
+		if id == trackID {
+			trackNum := i + 1
+			return &TagChanges{
+				TrackNumber: &trackNum,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("track not found in operation list")
+}
+
+// setFieldChanges creates changes for setting a single field on all tracks
+func (w *Writer) setFieldChanges(field string, value interface{}) (*TagChanges, error) {
+	changes := &TagChanges{}
+
+	switch field {
+	case "title":
+		v, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid value type for title")
+		}
+		changes.Title = &v
+	case "artist":
+		v, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid value type for artist")
+		}
+		changes.Artist = &v
+	case "album":
+		v, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid value type for album")
+		}
+		changes.Album = &v
+	case "albumArtist":
+		v, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid value type for albumArtist")
+		}
+		changes.AlbumArtist = &v
+	case "year":
+		var year int
+		switch v := value.(type) {
+		case float64:
+			year = int(v)
+		case int:
+			year = v
+		default:
+			return nil, fmt.Errorf("invalid value type for year")
+		}
+		changes.Year = &year
+	case "genre":
+		v, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid value type for genre")
+		}
+		changes.Genre = &v
+	case "discNumber":
+		var disc int
+		switch v := value.(type) {
+		case float64:
+			disc = int(v)
+		case int:
+			disc = v
+		default:
+			return nil, fmt.Errorf("invalid value type for discNumber")
+		}
+		changes.DiscNumber = &disc
+	default:
+		return nil, fmt.Errorf("unknown field: %s", field)
+	}
+
+	return changes, nil
+}
+
+// NormalizeAlbumArtist normalizes the album artist for all tracks in an album
+func (w *Writer) NormalizeAlbumArtist(ctx context.Context, albumName, artist, albumArtist, actor string) (*BulkResult, error) {
+	// Get all tracks for this album
+	detail, err := w.db.GetAlbumDetail(ctx, albumName, artist)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get album: %v", err)
+	}
+
+	trackIDs := make([]string, len(detail.Tracks))
+	for i, t := range detail.Tracks {
+		trackIDs[i] = t.ID
+	}
+
+	op := &BulkOperation{
+		TrackIDs:  trackIDs,
+		Operation: "normalize_album_artist",
+		Value:     albumArtist,
+	}
+
+	return w.ApplyBulkOperation(ctx, op, actor)
+}
+
+// FixTrackNumbering renumbers tracks sequentially for an album
+func (w *Writer) FixTrackNumbering(ctx context.Context, albumName, artist, actor string) (*BulkResult, error) {
+	// Get all tracks for this album (already sorted by disc/track)
+	detail, err := w.db.GetAlbumDetail(ctx, albumName, artist)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get album: %v", err)
+	}
+
+	trackIDs := make([]string, len(detail.Tracks))
+	for i, t := range detail.Tracks {
+		trackIDs[i] = t.ID
+	}
+
+	op := &BulkOperation{
+		TrackIDs:  trackIDs,
+		Operation: "fix_track_numbers",
+	}
+
+	return w.ApplyBulkOperation(ctx, op, actor)
+}

@@ -157,6 +157,12 @@ func main() {
 		r.Post("/tracks/{id}/tags/preview", h.PreviewTrackTags)
 		r.Get("/tracks/{id}/artifacts", h.GetTrackArtifacts)
 
+		// Bulk metadata operations
+		r.Post("/tracks/bulk/preview", h.PreviewBulkOperation)
+		r.Post("/tracks/bulk/apply", h.ApplyBulkOperation)
+		r.Post("/albums/normalize-artist", h.NormalizeAlbumArtist)
+		r.Post("/albums/fix-numbering", h.FixTrackNumbering)
+
 		// Jobs
 		r.Get("/jobs", h.ListJobs)
 

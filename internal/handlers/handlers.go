@@ -321,6 +321,153 @@ func (h *Handler) UpdateTrackTags(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, result)
 }
 
+// Bulk metadata operations
+
+type BulkOperationRequest struct {
+	TrackIDs  []string    `json:"trackIds"`
+	Operation string      `json:"operation"` // "normalize_album_artist", "fix_track_numbers", "set_field"
+	Value     interface{} `json:"value,omitempty"`
+	Field     string      `json:"field,omitempty"`
+}
+
+// PreviewBulkOperation previews a bulk metadata operation
+func (h *Handler) PreviewBulkOperation(w http.ResponseWriter, r *http.Request) {
+	var req BulkOperationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if len(req.TrackIDs) == 0 {
+		h.respondError(w, http.StatusBadRequest, "No track IDs provided")
+		return
+	}
+
+	if req.Operation == "" {
+		h.respondError(w, http.StatusBadRequest, "Operation is required")
+		return
+	}
+
+	op := &metadata.BulkOperation{
+		TrackIDs:  req.TrackIDs,
+		Operation: req.Operation,
+		Value:     req.Value,
+		Field:     req.Field,
+	}
+
+	preview, err := h.metadataWriter.PreviewBulkOperation(r.Context(), op)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, preview)
+}
+
+// ApplyBulkOperation applies a bulk metadata operation
+func (h *Handler) ApplyBulkOperation(w http.ResponseWriter, r *http.Request) {
+	var req BulkOperationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if len(req.TrackIDs) == 0 {
+		h.respondError(w, http.StatusBadRequest, "No track IDs provided")
+		return
+	}
+
+	if req.Operation == "" {
+		h.respondError(w, http.StatusBadRequest, "Operation is required")
+		return
+	}
+
+	actor := r.Header.Get("X-Actor")
+	if actor == "" {
+		actor = "system"
+	}
+
+	op := &metadata.BulkOperation{
+		TrackIDs:  req.TrackIDs,
+		Operation: req.Operation,
+		Value:     req.Value,
+		Field:     req.Field,
+	}
+
+	result, err := h.metadataWriter.ApplyBulkOperation(r.Context(), op, actor)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, result)
+}
+
+type NormalizeAlbumArtistRequest struct {
+	AlbumName   string `json:"albumName"`
+	Artist      string `json:"artist"`
+	AlbumArtist string `json:"albumArtist"`
+}
+
+// NormalizeAlbumArtist normalizes the album artist for all tracks in an album
+func (h *Handler) NormalizeAlbumArtist(w http.ResponseWriter, r *http.Request) {
+	var req NormalizeAlbumArtistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.AlbumName == "" {
+		h.respondError(w, http.StatusBadRequest, "Album name is required")
+		return
+	}
+
+	actor := r.Header.Get("X-Actor")
+	if actor == "" {
+		actor = "system"
+	}
+
+	result, err := h.metadataWriter.NormalizeAlbumArtist(r.Context(), req.AlbumName, req.Artist, req.AlbumArtist, actor)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, result)
+}
+
+type FixTrackNumberingRequest struct {
+	AlbumName string `json:"albumName"`
+	Artist    string `json:"artist"`
+}
+
+// FixTrackNumbering renumbers tracks sequentially for an album
+func (h *Handler) FixTrackNumbering(w http.ResponseWriter, r *http.Request) {
+	var req FixTrackNumberingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.AlbumName == "" {
+		h.respondError(w, http.StatusBadRequest, "Album name is required")
+		return
+	}
+
+	actor := r.Header.Get("X-Actor")
+	if actor == "" {
+		actor = "system"
+	}
+
+	result, err := h.metadataWriter.FixTrackNumbering(r.Context(), req.AlbumName, req.Artist, actor)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, result)
+}
+
 // Jobs
 
 func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
