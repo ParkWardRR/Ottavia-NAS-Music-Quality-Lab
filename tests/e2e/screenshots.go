@@ -89,6 +89,8 @@ func main() {
 		{"settings-dark", "/settings", 1920, 1080, true, 500 * time.Millisecond, false},
 		{"conversions-light", "/conversions", 1920, 1080, false, 500 * time.Millisecond, false},
 		{"conversions-dark", "/conversions", 1920, 1080, true, 500 * time.Millisecond, false},
+		{"artwork-light", "/artwork", 1920, 1080, false, 500 * time.Millisecond, false},
+		{"artwork-dark", "/artwork", 1920, 1080, true, 500 * time.Millisecond, false},
 		{"dashboard-mobile", "/", 375, 812, false, 500 * time.Millisecond, false},
 		{"tracks-mobile", "/tracks", 375, 812, false, 500 * time.Millisecond, false},
 	}

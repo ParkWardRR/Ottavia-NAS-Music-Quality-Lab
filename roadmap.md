@@ -39,12 +39,14 @@
 - [x] Album page overhaul with album art, quality badges, and DR scores
 - [x] Album-level consistency view (spot outliers across an album)
 
-## Phase 4 — Metadata editor + audit ✅ MOSTLY COMPLETE
+## Phase 4 — Metadata editor + audit ✅ COMPLETE
 - [x] Full metadata audit (missing/inconsistent tags, artwork checks)
 - [x] Tag display in track detail UI
 - [x] Artwork presence detection
 - [x] Safe write pipeline (atomic writes, action log, dry-run diffs)
 - [x] Bulk operations (normalize album artist, fix track/disc numbering, set fields)
+- [x] Album Art Manager with extraction, upload, and bulk operations
+- [x] AI-powered artwork suggestions for similar tracks
 - [ ] Optional ID lookup (add MBIDs/ISRCs with manual confirmation)
 
 ## Phase 5 — Conversion queue 🔄 IN PROGRESS
@@ -79,6 +81,18 @@
 ---
 
 ## Recent Accomplishments (Feb 2026)
+
+### Album Art Manager
+- Dedicated album art management page
+- Detect albums missing artwork at a glance
+- Extract embedded artwork from audio files using FFmpeg
+- Upload custom artwork with drag-and-drop interface
+- Bulk apply artwork to multiple tracks simultaneously
+- AI-powered suggestions for similar tracks (exact match, fuzzy match, artist match)
+- Smart matching by album name and album artist with confidence scoring
+- Preview changes before applying
+- Real-time progress indicators for bulk operations
+- Integration with existing artifact storage system
 
 ### Album-Level Consistency View
 - Full album detail page with artwork and metadata

@@ -83,10 +83,17 @@ Are your "lossless" files actually lossless? Many FLAC and ALAC files in the wil
 ### Metadata Management
 - Comprehensive tag auditing
 - Missing/inconsistent tag detection
-- Artwork presence verification
 - Safe write pipeline with atomic operations
 - Bulk operations (normalize album artist, fix track numbering)
 - Full action log for audit trail
+
+### Album Art Manager
+- Detect albums missing artwork at a glance
+- Extract embedded artwork from audio files
+- Upload custom artwork with drag-and-drop
+- Bulk apply artwork to multiple tracks
+- AI-powered suggestions for similar tracks
+- Smart matching by album name and artist
 
 ### Format Conversion
 - Built-in profiles (iPod-compatible, CD quality, high-res)
@@ -138,6 +145,12 @@ Are your "lossless" files actually lossless? Many FLAC and ALAC files in the wil
   <img src="screenshots/tracks-dark.png" alt="Tracks" width="100%">
   <br>
   <em>Tracks Browser - Filter by issues, search, and bulk select</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/artwork-dark.png" alt="Album Art Manager" width="100%">
+  <br>
+  <em>Album Art Manager - Find and fix missing artwork with AI-powered suggestions</em>
 </p>
 
 <p align="center">

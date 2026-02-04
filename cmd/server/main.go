@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ottavia-music/ottavia/internal/analyzer"
+	"github.com/ottavia-music/ottavia/internal/artwork"
 	"github.com/ottavia-music/ottavia/internal/config"
 	"github.com/ottavia-music/ottavia/internal/database"
 	"github.com/ottavia-music/ottavia/internal/handlers"
@@ -82,9 +83,10 @@ func main() {
 	scannerSvc := scanner.New(db, cfg.Scanner.WorkerCount, cfg.Scanner.BatchSize)
 	analyzerSvc := analyzer.New(db, cfg.FFmpeg.FFprobePath, cfg.FFmpeg.FFmpegPath, cfg.Storage.ArtifactsPath)
 	metadataWriter := metadata.New(db, cfg.FFmpeg.FFmpegPath)
+	artworkManager := artwork.New(db, cfg.FFmpeg.FFmpegPath, cfg.Storage.ArtifactsPath)
 
 	// Initialize handlers
-	h := handlers.New(db, scannerSvc, analyzerSvc, metadataWriter)
+	h := handlers.New(db, scannerSvc, analyzerSvc, metadataWriter, artworkManager)
 
 	// Start job workers
 	worker := jobs.NewWorker(db, analyzerSvc, cfg.Scanner.WorkerCount)
@@ -172,6 +174,13 @@ func main() {
 
 		// Conversion profiles
 		r.Get("/profiles", h.ListConversionProfiles)
+
+		// Artwork management
+		r.Get("/artwork/missing", h.ListMissingArtwork)
+		r.Post("/artwork/extract", h.ExtractArtwork)
+		r.Post("/artwork/{id}/upload", h.UploadArtwork)
+		r.Post("/artwork/apply", h.ApplyArtwork)
+		r.Get("/artwork/{id}/suggestions", h.GetArtworkSuggestions)
 
 		// Action logs
 		r.Get("/logs", h.ListActionLogs)
@@ -295,6 +304,20 @@ func main() {
 		settings, _ := db.GetAllSettings(ctx)
 
 		pages.ConversionsPage(jobs, profiles, settings).Render(ctx, w)
+	})
+
+	r.Get("/artwork", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		libraryID := r.URL.Query().Get("library_id")
+
+		missing, err := artworkManager.ListMissingArtwork(ctx, libraryID)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to list missing artwork")
+			missing = []artwork.MissingArtworkSummary{}
+		}
+		settings, _ := db.GetAllSettings(ctx)
+
+		pages.ArtworkPage(missing, settings).Render(ctx, w)
 	})
 
 	r.Get("/jobs", func(w http.ResponseWriter, r *http.Request) {
