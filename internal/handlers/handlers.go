@@ -11,21 +11,24 @@ import (
 
 	"github.com/ottavia-music/ottavia/internal/analyzer"
 	"github.com/ottavia-music/ottavia/internal/database"
+	"github.com/ottavia-music/ottavia/internal/metadata"
 	"github.com/ottavia-music/ottavia/internal/models"
 	"github.com/ottavia-music/ottavia/internal/scanner"
 )
 
 type Handler struct {
-	db       *database.DB
-	scanner  *scanner.Scanner
-	analyzer *analyzer.Analyzer
+	db             *database.DB
+	scanner        *scanner.Scanner
+	analyzer       *analyzer.Analyzer
+	metadataWriter *metadata.Writer
 }
 
-func New(db *database.DB, scanner *scanner.Scanner, analyzer *analyzer.Analyzer) *Handler {
+func New(db *database.DB, scanner *scanner.Scanner, analyzer *analyzer.Analyzer, metadataWriter *metadata.Writer) *Handler {
 	return &Handler{
-		db:       db,
-		scanner:  scanner,
-		analyzer: analyzer,
+		db:             db,
+		scanner:        scanner,
+		analyzer:       analyzer,
+		metadataWriter: metadataWriter,
 	}
 }
 
@@ -247,14 +250,9 @@ type UpdateTagsRequest struct {
 	Genre       *string `json:"genre,omitempty"`
 }
 
-func (h *Handler) UpdateTrackTags(w http.ResponseWriter, r *http.Request) {
+// PreviewTrackTags performs a dry-run of tag changes showing what would be modified
+func (h *Handler) PreviewTrackTags(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-
-	track, err := h.db.GetTrack(r.Context(), id)
-	if err != nil {
-		h.respondError(w, http.StatusNotFound, "Track not found")
-		return
-	}
 
 	var req UpdateTagsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -262,10 +260,65 @@ func (h *Handler) UpdateTrackTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement actual tag writing with ffmpeg/taglib
-	// For now, just update database
+	changes := &metadata.TagChanges{
+		Title:       req.Title,
+		Artist:      req.Artist,
+		Album:       req.Album,
+		AlbumArtist: req.AlbumArtist,
+		TrackNumber: req.TrackNumber,
+		DiscNumber:  req.DiscNumber,
+		Year:        req.Year,
+		Genre:       req.Genre,
+	}
 
-	h.respondJSON(w, http.StatusOK, track)
+	preview, err := h.metadataWriter.PreviewChanges(r.Context(), id, changes)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, preview)
+}
+
+// UpdateTrackTags applies tag changes to a track with safe write operations
+func (h *Handler) UpdateTrackTags(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var req UpdateTagsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	changes := &metadata.TagChanges{
+		Title:       req.Title,
+		Artist:      req.Artist,
+		Album:       req.Album,
+		AlbumArtist: req.AlbumArtist,
+		TrackNumber: req.TrackNumber,
+		DiscNumber:  req.DiscNumber,
+		Year:        req.Year,
+		Genre:       req.Genre,
+	}
+
+	// Get actor from request (could be from auth header in future)
+	actor := r.Header.Get("X-Actor")
+	if actor == "" {
+		actor = "system"
+	}
+
+	result, err := h.metadataWriter.ApplyChanges(r.Context(), id, changes, actor)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if !result.Success {
+		h.respondJSON(w, http.StatusBadRequest, result)
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, result)
 }
 
 // Jobs

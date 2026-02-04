@@ -43,7 +43,7 @@
 - [x] Full metadata audit (missing/inconsistent tags, artwork checks)
 - [x] Tag display in track detail UI
 - [x] Artwork presence detection
-- [ ] Safe write pipeline (atomic writes, action log, dry-run diffs)
+- [x] Safe write pipeline (atomic writes, action log, dry-run diffs)
 - [ ] Bulk operations (normalize album artist, fix track/disc numbering, artwork replace)
 - [ ] Optional ID lookup (add MBIDs/ISRCs with manual confirmation)
 

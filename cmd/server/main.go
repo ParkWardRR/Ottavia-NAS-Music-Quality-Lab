@@ -22,6 +22,7 @@ import (
 	"github.com/ottavia-music/ottavia/internal/database"
 	"github.com/ottavia-music/ottavia/internal/handlers"
 	"github.com/ottavia-music/ottavia/internal/jobs"
+	"github.com/ottavia-music/ottavia/internal/metadata"
 	"github.com/ottavia-music/ottavia/internal/models"
 	"github.com/ottavia-music/ottavia/internal/scanner"
 	"github.com/ottavia-music/ottavia/web/templates/pages"
@@ -80,9 +81,10 @@ func main() {
 	// Initialize services
 	scannerSvc := scanner.New(db, cfg.Scanner.WorkerCount, cfg.Scanner.BatchSize)
 	analyzerSvc := analyzer.New(db, cfg.FFmpeg.FFprobePath, cfg.FFmpeg.FFmpegPath, cfg.Storage.ArtifactsPath)
+	metadataWriter := metadata.New(db, cfg.FFmpeg.FFmpegPath)
 
 	// Initialize handlers
-	h := handlers.New(db, scannerSvc, analyzerSvc)
+	h := handlers.New(db, scannerSvc, analyzerSvc, metadataWriter)
 
 	// Start job workers
 	worker := jobs.NewWorker(db, analyzerSvc, cfg.Scanner.WorkerCount)
@@ -152,6 +154,7 @@ func main() {
 		r.Get("/tracks", h.ListTracks)
 		r.Get("/tracks/{id}", h.GetTrack)
 		r.Post("/tracks/{id}/tags", h.UpdateTrackTags)
+		r.Post("/tracks/{id}/tags/preview", h.PreviewTrackTags)
 		r.Get("/tracks/{id}/artifacts", h.GetTrackArtifacts)
 
 		// Jobs
