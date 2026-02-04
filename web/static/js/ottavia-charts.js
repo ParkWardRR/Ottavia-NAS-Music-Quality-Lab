@@ -839,11 +839,14 @@
           }
 
           const data = await response.json();
-          this.initChart(data);
+          // Set loading false first, then wait for DOM update before initializing chart
+          this.loading = false;
+          this.$nextTick(() => {
+            this.initChart(data);
+          });
         } catch (e) {
           console.error('Failed to load chart data:', e);
           this.error = e.message;
-        } finally {
           this.loading = false;
         }
       },
