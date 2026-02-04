@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -767,6 +768,73 @@ func (h *Handler) GetArtworkSuggestions(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.respondJSON(w, http.StatusOK, suggestions)
+}
+
+// Audio Scan handlers
+
+func (h *Handler) GetAudioScanManifest(w http.ResponseWriter, r *http.Request) {
+	trackID := chi.URLParam(r, "id")
+
+	track, err := h.db.GetTrack(r.Context(), trackID)
+	if err != nil {
+		h.respondError(w, http.StatusNotFound, "Track not found")
+		return
+	}
+
+	// Build the manifest path
+	prefix := trackID
+	if len(trackID) >= 2 {
+		prefix = trackID[:2]
+	}
+	manifestPath := fmt.Sprintf("tracks/%s/%s/analysis_manifest_v1.json", prefix, trackID)
+
+	// Return the manifest info (UI can fetch the actual file from /artifacts/)
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"trackId":      trackID,
+		"manifestPath": manifestPath,
+		"artifactsUrl": fmt.Sprintf("/artifacts/tracks/%s/%s/", prefix, trackID),
+		"track":        track,
+	})
+}
+
+type RunAudioScanRequest struct {
+	MaxDurationSec float64 `json:"maxDurationSec,omitempty"`
+}
+
+func (h *Handler) RunAudioScan(w http.ResponseWriter, r *http.Request) {
+	trackID := chi.URLParam(r, "id")
+
+	// Check if track exists
+	_, err := h.db.GetTrack(r.Context(), trackID)
+	if err != nil {
+		h.respondError(w, http.StatusNotFound, "Track not found")
+		return
+	}
+
+	// Parse optional request body
+	var req RunAudioScanRequest
+	json.NewDecoder(r.Body).Decode(&req) // Ignore errors for optional body
+
+	// Queue the audio scan job
+	job := &models.Job{
+		Type:        "audioscan",
+		TargetType:  "track",
+		TargetID:    trackID,
+		Status:      models.StatusQueued,
+		MaxAttempts: 3,
+	}
+
+	if err := h.db.CreateJob(r.Context(), job); err != nil {
+		h.respondError(w, http.StatusInternalServerError, "Failed to queue audio scan job")
+		return
+	}
+
+	h.respondJSON(w, http.StatusAccepted, map[string]interface{}{
+		"status":  "queued",
+		"jobId":   job.ID,
+		"trackId": trackID,
+		"message": "Audio scan job queued",
+	})
 }
 
 // Health check

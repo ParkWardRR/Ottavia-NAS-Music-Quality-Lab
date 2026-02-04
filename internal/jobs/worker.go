@@ -9,14 +9,16 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ottavia-music/ottavia/internal/analyzer"
+	"github.com/ottavia-music/ottavia/internal/audioscan"
 	"github.com/ottavia-music/ottavia/internal/database"
 	"github.com/ottavia-music/ottavia/internal/models"
 )
 
 type Worker struct {
-	db          *database.DB
-	analyzer    *analyzer.Analyzer
-	workerCount int
+	db           *database.DB
+	analyzer     *analyzer.Analyzer
+	audioScanner *audioscan.Scanner
+	workerCount  int
 	pollInterval time.Duration
 
 	running   bool
@@ -25,10 +27,11 @@ type Worker struct {
 	wg        sync.WaitGroup
 }
 
-func NewWorker(db *database.DB, analyzer *analyzer.Analyzer, workerCount int) *Worker {
+func NewWorker(db *database.DB, analyzer *analyzer.Analyzer, audioScanner *audioscan.Scanner, workerCount int) *Worker {
 	return &Worker{
 		db:           db,
 		analyzer:     analyzer,
+		audioScanner: audioScanner,
 		workerCount:  workerCount,
 		pollInterval: 5 * time.Second,
 	}
@@ -90,12 +93,22 @@ func (w *Worker) workerLoop(ctx context.Context, id int) {
 }
 
 func (w *Worker) processNextJob(ctx context.Context, workerID int) {
-	// Try to get an analyze job
-	job, err := w.db.GetNextJob(ctx, "analyze")
-	if err != nil {
-		if err != sql.ErrNoRows {
-			log.Error().Err(err).Msg("Failed to get next job")
+	// Try to get a job of any supported type
+	jobTypes := []string{"analyze", "audioscan"}
+	var job *models.Job
+	var err error
+
+	for _, jobType := range jobTypes {
+		job, err = w.db.GetNextJob(ctx, jobType)
+		if err == nil {
+			break
 		}
+		if err != sql.ErrNoRows {
+			log.Error().Err(err).Str("type", jobType).Msg("Failed to get next job")
+		}
+	}
+
+	if job == nil {
 		return
 	}
 
@@ -114,6 +127,12 @@ func (w *Worker) processNextJob(ctx context.Context, workerID int) {
 	switch job.Type {
 	case "analyze":
 		processErr = w.analyzer.AnalyzeFile(ctx, job.TargetID)
+	case "audioscan":
+		if w.audioScanner != nil {
+			processErr = w.audioScanner.ScanTrack(ctx, job.TargetID)
+		} else {
+			log.Warn().Msg("Audio scanner not configured")
+		}
 	default:
 		log.Warn().Str("type", job.Type).Msg("Unknown job type")
 		return
