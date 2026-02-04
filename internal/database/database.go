@@ -614,6 +614,56 @@ func (db *DB) GetConversionProfile(ctx context.Context, id string) (*models.Conv
 	return &profile, nil
 }
 
+// Conversion job operations
+
+func (db *DB) ListConversionJobs(ctx context.Context, limit int) ([]models.ConversionJob, error) {
+	var jobs []models.ConversionJob
+	err := db.SelectContext(ctx, &jobs, `
+		SELECT * FROM conversion_jobs
+		ORDER BY
+			CASE status
+				WHEN 'running' THEN 0
+				WHEN 'queued' THEN 1
+				WHEN 'failed' THEN 2
+				ELSE 3
+			END,
+			queued_at DESC
+		LIMIT ?
+	`, limit)
+	return jobs, err
+}
+
+func (db *DB) CreateConversionJob(ctx context.Context, job *models.ConversionJob) error {
+	job.ID = uuid.NewString()
+	job.Status = models.StatusQueued
+	job.QueuedAt = time.Now()
+
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO conversion_jobs (id, source_type, source_id, profile, output_path, status, progress, queued_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, job.ID, job.SourceType, job.SourceID, job.Profile, job.OutputPath, job.Status, job.Progress, job.QueuedAt)
+
+	return err
+}
+
+func (db *DB) UpdateConversionJob(ctx context.Context, job *models.ConversionJob) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE conversion_jobs
+		SET status = ?, progress = ?, logs_path = ?, error_msg = ?, started_at = ?, finished_at = ?
+		WHERE id = ?
+	`, job.Status, job.Progress, job.LogsPath, job.ErrorMsg, job.StartedAt, job.FinishedAt, job.ID)
+	return err
+}
+
+func (db *DB) GetConversionJob(ctx context.Context, id string) (*models.ConversionJob, error) {
+	var job models.ConversionJob
+	err := db.GetContext(ctx, &job, "SELECT * FROM conversion_jobs WHERE id = ?", id)
+	if err != nil {
+		return nil, err
+	}
+	return &job, nil
+}
+
 // Album represents a grouped album with version information
 type Album struct {
 	Name         string `db:"album_name" json:"name"`

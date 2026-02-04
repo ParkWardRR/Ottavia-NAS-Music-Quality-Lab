@@ -281,7 +281,20 @@ func main() {
 	})
 
 	r.Get("/conversions", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		ctx := r.Context()
+		jobs, err := db.ListConversionJobs(ctx, 50)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to list conversion jobs")
+			jobs = []models.ConversionJob{}
+		}
+		profiles, err := db.ListConversionProfiles(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to list conversion profiles")
+			profiles = []models.ConversionProfile{}
+		}
+		settings, _ := db.GetAllSettings(ctx)
+
+		pages.ConversionsPage(jobs, profiles, settings).Render(ctx, w)
 	})
 
 	r.Get("/jobs", func(w http.ResponseWriter, r *http.Request) {

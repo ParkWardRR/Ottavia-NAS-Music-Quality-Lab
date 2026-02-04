@@ -1,0 +1,287 @@
+package pages
+
+import (
+	"fmt"
+	"github.com/ottavia-music/ottavia/web/templates/layouts"
+	"github.com/ottavia-music/ottavia/internal/models"
+)
+
+templ ConversionsPage(jobs []models.ConversionJob, profiles []models.ConversionProfile, settings map[string]string) {
+	@layouts.Base("Conversions", settings) {
+		<!-- Header -->
+		<div class="mb-8">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Conversions</h1>
+					<p class="mt-1 text-gray-500 dark:text-gray-400">
+						Convert tracks between formats
+					</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+			<!-- Main Content -->
+			<div class="lg:col-span-2 space-y-6">
+				<!-- Active Conversions -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Conversion Queue</h2>
+						<span class="text-sm text-gray-500 dark:text-gray-400">
+							{ fmt.Sprintf("%d jobs", len(jobs)) }
+						</span>
+					</div>
+
+					if len(jobs) == 0 {
+						<div class="p-12 text-center">
+							<div class="w-16 h-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+								<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+								</svg>
+							</div>
+							<h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No conversion jobs</h3>
+							<p class="text-gray-500 dark:text-gray-400">
+								Select tracks and choose a profile to start converting
+							</p>
+						</div>
+					} else {
+						<div class="divide-y divide-gray-200/50 dark:divide-gray-800/50">
+							for _, job := range jobs {
+								@ConversionJobRow(job)
+							}
+						</div>
+					}
+				</div>
+
+				<!-- How to Convert -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">How to Convert</h2>
+					</div>
+					<div class="p-6 space-y-4">
+						<div class="flex items-start gap-4">
+							<div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+								<span class="text-sm font-bold text-blue-600 dark:text-blue-400">1</span>
+							</div>
+							<div>
+								<h3 class="font-medium text-gray-900 dark:text-white">Select Tracks</h3>
+								<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+									Go to the Tracks or Albums page and select the files you want to convert
+								</p>
+							</div>
+						</div>
+						<div class="flex items-start gap-4">
+							<div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+								<span class="text-sm font-bold text-blue-600 dark:text-blue-400">2</span>
+							</div>
+							<div>
+								<h3 class="font-medium text-gray-900 dark:text-white">Choose Profile</h3>
+								<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+									Select a conversion profile that matches your target format
+								</p>
+							</div>
+						</div>
+						<div class="flex items-start gap-4">
+							<div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+								<span class="text-sm font-bold text-blue-600 dark:text-blue-400">3</span>
+							</div>
+							<div>
+								<h3 class="font-medium text-gray-900 dark:text-white">Monitor Progress</h3>
+								<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+									Watch the conversion progress here and view logs when complete
+								</p>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Sidebar -->
+			<div class="space-y-6">
+				<!-- Conversion Profiles -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Profiles</h2>
+					</div>
+					<div class="p-4 space-y-3">
+						for _, profile := range profiles {
+							@ProfileCard(profile)
+						}
+					</div>
+				</div>
+
+				<!-- Quick Stats -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Statistics</h2>
+					</div>
+					<div class="p-6 space-y-4">
+						@ConversionStat("In Progress", countJobsByStatus(jobs, "running"), "text-blue-600 dark:text-blue-400")
+						@ConversionStat("Queued", countJobsByStatus(jobs, "queued"), "text-amber-600 dark:text-amber-400")
+						@ConversionStat("Completed", countJobsByStatus(jobs, "success"), "text-emerald-600 dark:text-emerald-400")
+						@ConversionStat("Failed", countJobsByStatus(jobs, "failed"), "text-red-600 dark:text-red-400")
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ ConversionJobRow(job models.ConversionJob) {
+	<div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+		<div class="flex items-center gap-4">
+			<!-- Status Icon -->
+			<div class={ fmt.Sprintf("w-10 h-10 rounded-full flex items-center justify-center %s", getJobStatusBg(job.Status)) }>
+				if job.Status == "running" {
+					<svg class="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+					</svg>
+				} else if job.Status == "success" {
+					<svg class="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+					</svg>
+				} else if job.Status == "failed" {
+					<svg class="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+					</svg>
+				} else {
+					<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					</svg>
+				}
+			</div>
+
+			<!-- Job Info -->
+			<div class="flex-1 min-w-0">
+				<div class="flex items-center gap-2">
+					<span class="font-medium text-gray-900 dark:text-white truncate">
+						{ job.SourceType } conversion
+					</span>
+					<span class={ fmt.Sprintf("px-2 py-0.5 rounded text-xs font-medium %s", getJobStatusBadge(job.Status)) }>
+						{ job.Status }
+					</span>
+				</div>
+				<div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+					Profile: { job.Profile }
+					if job.OutputPath != "" {
+						<span class="ml-2">→ { job.OutputPath }</span>
+					}
+				</div>
+
+				<!-- Progress Bar -->
+				if job.Status == "running" {
+					<div class="mt-2">
+						<div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+							<span>Progress</span>
+							<span>{ fmt.Sprintf("%.0f%%", job.Progress) }</span>
+						</div>
+						<div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+							<div
+								class="h-full bg-blue-600 rounded-full transition-all duration-300"
+								style={ fmt.Sprintf("width: %.0f%%", job.Progress) }
+							></div>
+						</div>
+					</div>
+				}
+
+				<!-- Error Message -->
+				if job.Status == "failed" && job.ErrorMsg.Valid {
+					<div class="mt-2 text-sm text-red-600 dark:text-red-400">
+						{ job.ErrorMsg.String }
+					</div>
+				}
+			</div>
+
+			<!-- Actions -->
+			<div class="flex items-center gap-2">
+				if job.Status == "running" || job.Status == "queued" {
+					<button class="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Cancel">
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+						</svg>
+					</button>
+				}
+				if job.LogsPath.Valid {
+					<button class="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="View Logs">
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+						</svg>
+					</button>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+templ ProfileCard(profile models.ConversionProfile) {
+	<div class="p-4 rounded-xl border border-gray-200/50 dark:border-gray-700/50 hover:border-blue-300 dark:hover:border-blue-700 transition-colors">
+		<div class="flex items-center justify-between mb-2">
+			<span class="font-medium text-gray-900 dark:text-white">{ profile.Name }</span>
+			<span class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+				{ profile.Codec }
+			</span>
+		</div>
+		<p class="text-sm text-gray-500 dark:text-gray-400">{ profile.Description }</p>
+		<div class="flex items-center gap-2 mt-2 text-xs text-gray-400">
+			if profile.SampleRate > 0 {
+				<span>{ fmt.Sprintf("%dkHz", profile.SampleRate/1000) }</span>
+			}
+			if profile.BitDepth > 0 {
+				<span>{ fmt.Sprintf("%d-bit", profile.BitDepth) }</span>
+			}
+			if profile.Bitrate > 0 {
+				<span>{ fmt.Sprintf("%dkbps", profile.Bitrate/1000) }</span>
+			}
+		</div>
+	</div>
+}
+
+templ ConversionStat(label string, count int, colorClass string) {
+	<div class="flex items-center justify-between">
+		<span class="text-sm text-gray-600 dark:text-gray-300">{ label }</span>
+		<span class={ fmt.Sprintf("text-lg font-bold %s", colorClass) }>{ fmt.Sprintf("%d", count) }</span>
+	</div>
+}
+
+func getJobStatusBg(status string) string {
+	switch status {
+	case "running":
+		return "bg-blue-100 dark:bg-blue-500/20"
+	case "success":
+		return "bg-emerald-100 dark:bg-emerald-500/20"
+	case "failed":
+		return "bg-red-100 dark:bg-red-500/20"
+	case "queued":
+		return "bg-amber-100 dark:bg-amber-500/20"
+	default:
+		return "bg-gray-100 dark:bg-gray-800"
+	}
+}
+
+func getJobStatusBadge(status string) string {
+	switch status {
+	case "running":
+		return "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300"
+	case "success":
+		return "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+	case "failed":
+		return "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300"
+	case "queued":
+		return "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
+	case "cancelled":
+		return "bg-gray-100 dark:bg-gray-500/20 text-gray-700 dark:text-gray-300"
+	default:
+		return "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+	}
+}
+
+func countJobsByStatus(jobs []models.ConversionJob, status string) int {
+	count := 0
+	for _, j := range jobs {
+		if j.Status == status {
+			count++
+		}
+	}
+	return count
+}
