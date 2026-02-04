@@ -104,6 +104,16 @@ Are your "lossless" files actually lossless? Many FLAC and ALAC files in the wil
 - Dynamics segmentation with per-section DR scores
 - Raw data export (MessagePack + Zstd compressed)
 
+### Verbose Job Logging & Bulk Operations
+- Real-time verbose logging for audio scan jobs
+- Module-specific log entries (spectrum, loudness, clipping, phase, dynamics)
+- Color-coded log levels (info, debug, warn, error)
+- Live log streaming in the UI with auto-scroll
+- Bulk audio scan for entire libraries or filtered tracks
+- Job status tracking (running, completed, failed)
+- FFmpeg command logging for debugging
+- Automatic log cleanup to prevent memory bloat
+
 ### Format Conversion
 - Built-in profiles (iPod-compatible, CD quality, high-res)
 - Queue-based processing with progress tracking
@@ -331,6 +341,88 @@ ffmpeg:
 2. Choose a conversion profile
 3. Monitor progress in the Conversions page
 
+### Running Audio Analysis
+
+**Single Track:**
+1. Open any track's detail page
+2. Expand the "Audio Scan Panels" section
+3. Click "Run Audio Scan" to analyze
+4. Watch real-time progress in the verbose log viewer
+5. Charts appear automatically when complete
+
+**Bulk Library Scan:**
+1. Use the API to trigger bulk analysis:
+   ```bash
+   curl -X POST http://localhost:8080/api/audioscan/bulk \
+     -H "Content-Type: application/json" \
+     -d '{"libraryId": "your-library-uuid"}'
+   ```
+2. Monitor progress via job logs API or the UI
+3. All tracks are queued and processed in parallel
+
+### Monitoring Job Progress
+
+The verbose logging system provides real-time insight into audio scan jobs:
+
+1. **Via UI**: Open any track and run an audio scan - the log viewer shows real-time updates
+2. **Via API**: Poll `/api/jobs/{id}/logs?since={lastIndex}` for streaming updates
+3. **Job List**: `GET /api/jobs/logs` shows recent job summaries
+
+Log levels:
+- **info**: Major milestones (job started, module complete, job finished)
+- **debug**: Detailed diagnostic info (FFmpeg commands, intermediate values)
+- **warn**: Non-fatal issues (skipped modules, fallback behavior)
+- **error**: Failures that stop processing
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Web Browser                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │  Alpine.js  │  │    HTMX     │  │  ottavia-charts.js      │  │
+│  │   Stores    │  │  Updates    │  │  (Canvas Charts)        │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ HTTP/JSON
+┌────────────────────────────▼────────────────────────────────────┐
+│                      Go HTTP Server                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │  Handlers   │  │  templ      │  │     Chi Router          │  │
+│  │   (API)     │  │  Templates  │  │                         │  │
+│  └──────┬──────┘  └─────────────┘  └─────────────────────────┘  │
+│         │                                                       │
+│  ┌──────▼──────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │  Services   │  │  Job Queue  │  │     Job Logger          │  │
+│  │ (business)  │  │  (workers)  │  │   (in-memory)           │  │
+│  └──────┬──────┘  └──────┬──────┘  └─────────────────────────┘  │
+│         │                │                                      │
+│  ┌──────▼──────┐  ┌──────▼──────┐  ┌─────────────────────────┐  │
+│  │  Models     │  │ AudioScan   │  │    Artifact Storage     │  │
+│  │   (DB)      │  │  Scanner    │  │   (msgpack+zstd)        │  │
+│  └──────┬──────┘  └──────┬──────┘  └─────────────────────────┘  │
+└─────────┼────────────────┼──────────────────────────────────────┘
+          │                │
+┌─────────▼─────┐  ┌───────▼───────┐
+│    SQLite     │  │    FFmpeg     │
+│   Database    │  │   FFprobe     │
+└───────────────┘  └───────────────┘
+```
+
+### Key Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| HTTP Handlers | `internal/handlers/` | REST API and HTML routes |
+| Job Queue | `internal/jobs/` | Persistent job queue with worker pool |
+| Job Logger | `internal/jobs/logger.go` | In-memory verbose logging |
+| Audio Scanner | `internal/audioscan/` | FFmpeg-based audio analysis |
+| Database Models | `internal/models/` | SQLite data layer |
+| Templates | `web/templates/` | templ HTML components |
+| Static Assets | `web/static/` | CSS, JS, images |
+
 ---
 
 ## API Reference
@@ -383,6 +475,40 @@ POST /api/tracks/bulk/preview
 POST /api/tracks/bulk/apply
 ```
 
+### Audio Scan
+
+```bash
+# Get audio scan manifest for a track
+GET /api/tracks/:id/audioscan/manifest
+
+# Get series data for charts (with decimation)
+GET /api/tracks/:id/audioscan/series?module=spectrum&maxPoints=1000
+
+# Run audio scan for a single track
+POST /api/tracks/:id/audioscan
+
+# Bulk audio scan (all tracks or filtered by library)
+POST /api/audioscan/bulk
+{
+  "libraryId": "optional-library-uuid"
+}
+```
+
+### Job Logs
+
+```bash
+# List recent job logs (summary)
+GET /api/jobs/logs
+GET /api/jobs/logs?limit=50
+
+# Get full log for a specific job
+GET /api/jobs/:id/logs
+
+# Stream new log entries (polling)
+GET /api/jobs/:id/logs?since=10
+# Returns: { "entries": [...], "nextIndex": 15, "status": "running" }
+```
+
 ---
 
 ## Roadmap
@@ -396,6 +522,7 @@ POST /api/tracks/bulk/apply
 - [ ] **Phase 6**: Hardening + security (RBAC, backups)
 - [x] **Phase 7**: Audio Scan-style analysis with raw data manifests
 - [x] **Phase 8**: Dynamic evidence graphs (interactive canvas charts)
+- [x] **Phase 9**: Verbose job logging + bulk audio scan operations
 
 See [roadmap.md](roadmap.md) for detailed progress.
 
@@ -409,6 +536,85 @@ See [roadmap.md](roadmap.md) for detailed progress.
 - **Interactivity**: [Alpine.js](https://alpinejs.dev/) + [HTMX](https://htmx.org/)
 - **Database**: SQLite with WAL mode
 - **Audio Analysis**: FFmpeg / FFprobe
+- **Data Compression**: MessagePack + Zstandard (zstd)
+- **Charts**: Custom Canvas renderer with LTTB decimation
+
+---
+
+## Audio Analysis Modules
+
+Ottavia's audio scan feature provides comprehensive analysis through five specialized modules:
+
+### Spectrum Analysis
+Performs FFT-based frequency spectrum analysis to detect:
+- **Bandwidth**: Actual frequency content vs. expected Nyquist limit
+- **DC Offset**: Low-frequency bias that can cause clipping
+- **Lossy Artifacts**: Spectral rolloff patterns typical of MP3/AAC transcodes
+- **Quality Classification**: Hi-Res (>48kHz), Studio (96kHz+), CD (44.1kHz), Lossy
+
+### Loudness Analysis
+Implements EBU R128 loudness measurement:
+- **Integrated LUFS**: Overall loudness across the track
+- **Momentary LUFS**: 400ms windowed measurements (timeline)
+- **Short-term LUFS**: 3-second windowed measurements (timeline)
+- **Loudness Range (LRA)**: Dynamic loudness variation
+- **True Peak**: Maximum inter-sample peak level
+
+### Clipping Detection
+Identifies digital clipping and overs:
+- **Clipped Samples**: Consecutive samples at digital maximum
+- **True Peak Overs**: Samples exceeding 0 dBTP
+- **Timeline Visualization**: Shows worst clipping sections
+- **Severity Scoring**: Quantifies clipping impact
+
+### Phase Correlation
+Analyzes stereo field characteristics:
+- **Correlation Coefficient**: -1 (out of phase) to +1 (mono)
+- **L/R Balance**: Left/right channel level difference
+- **Phase Issues**: Detects persistent negative correlation
+- **Timeline**: Shows correlation changes throughout track
+
+### Dynamics Analysis
+Measures dynamic range and compression:
+- **DR Score**: Industry-standard dynamic range measurement
+- **Crest Factor**: Peak-to-RMS ratio per segment
+- **Per-Section Analysis**: Identifies "crushed" sections
+- **Visual Scale**: Crushed → Limited → Moderate → Good → Excellent
+
+---
+
+## Data Formats
+
+### Analysis Manifest
+Each analyzed track has an `analysis_manifest_v1.json` that serves as the source of truth:
+
+```json
+{
+  "version": "1.0",
+  "trackId": "uuid",
+  "analyzedAt": "2026-02-04T10:30:00Z",
+  "modules": {
+    "spectrum": {
+      "status": "complete",
+      "dataFile": "spectrum_raw.msgpack.zst",
+      "sha256": "abc123...",
+      "metrics": {
+        "expectedQuality": "CD Quality (44.1 kHz)",
+        "detectedQuality": "Verified Lossless",
+        "bandwidth": 20000,
+        "dcOffset": 0.001
+      }
+    }
+  }
+}
+```
+
+### Raw Data Storage
+Analysis data is stored in compressed binary format:
+- **Format**: MessagePack (efficient binary JSON)
+- **Compression**: Zstandard (zstd) for ~80% size reduction
+- **Integrity**: SHA256 hash in manifest for verification
+- **Access**: Direct download or decimated JSON via API
 
 ---
 
