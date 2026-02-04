@@ -739,3 +739,248 @@ func formatQuality(codec string, sampleRate, bitDepth int) string {
 	}
 	return fmt.Sprintf("%s %dkHz/%d-bit", codecLabel, sampleRate/1000, bitDepth)
 }
+
+// AlbumDetail contains full album information with all tracks
+type AlbumDetail struct {
+	Name          string       `json:"name"`
+	Artist        string       `json:"artist"`
+	Year          int          `json:"year"`
+	TrackCount    int          `json:"trackCount"`
+	TotalDuration float64      `json:"totalDuration"`
+	TotalSize     int64        `json:"totalSize"`
+	ArtworkPath   string       `json:"artworkPath,omitempty"`
+	Tracks        []AlbumTrack `json:"tracks"`
+	Consistency   AlbumConsistency `json:"consistency"`
+}
+
+// AlbumTrack represents a track within an album with analysis data for consistency view
+type AlbumTrack struct {
+	ID               string  `db:"id" json:"id"`
+	TrackNumber      int     `db:"track_number" json:"trackNumber"`
+	DiscNumber       int     `db:"disc_number" json:"discNumber"`
+	Title            string  `db:"title" json:"title"`
+	Duration         float64 `db:"duration" json:"duration"`
+	Codec            string  `db:"codec" json:"codec"`
+	SampleRate       int     `db:"sample_rate" json:"sampleRate"`
+	BitDepth         int     `db:"bit_depth" json:"bitDepth"`
+	Bitrate          int     `db:"bitrate" json:"bitrate"`
+	FileSize         int64   `db:"file_size" json:"fileSize"`
+	Path             string  `db:"path" json:"path"`
+	// Analysis data
+	LosslessStatus   string  `db:"lossless_status" json:"losslessStatus"`
+	LosslessScore    float64 `db:"lossless_score" json:"losslessScore"`
+	IntegrityOK      bool    `db:"integrity_ok" json:"integrityOK"`
+	ClippedSamples   int     `db:"clipped_samples" json:"clippedSamples"`
+	PeakLevel        float64 `db:"peak_level" json:"peakLevel"`
+	IntegratedLoudness float64 `db:"integrated_loudness" json:"integratedLoudness"`
+	LoudnessRange    float64 `db:"loudness_range" json:"loudnessRange"`
+	CrestFactor      float64 `db:"crest_factor" json:"crestFactor"`
+	DRScore          int     `json:"drScore"`
+	// Outlier flags
+	IsCodecOutlier     bool `json:"isCodecOutlier"`
+	IsSampleRateOutlier bool `json:"isSampleRateOutlier"`
+	IsBitDepthOutlier  bool `json:"isBitDepthOutlier"`
+	IsDROutlier        bool `json:"isDROutlier"`
+	IsLoudnessOutlier  bool `json:"isLoudnessOutlier"`
+	IsSuspect          bool `json:"isSuspect"`
+}
+
+// AlbumConsistency contains consistency analysis for an album
+type AlbumConsistency struct {
+	IsConsistent     bool    `json:"isConsistent"`
+	DominantCodec    string  `json:"dominantCodec"`
+	DominantSampleRate int   `json:"dominantSampleRate"`
+	DominantBitDepth int     `json:"dominantBitDepth"`
+	AvgDR            int     `json:"avgDR"`
+	AvgLoudness      float64 `json:"avgLoudness"`
+	CodecVariety     int     `json:"codecVariety"`
+	SampleRateVariety int    `json:"sampleRateVariety"`
+	BitDepthVariety  int     `json:"bitDepthVariety"`
+	SuspectCount     int     `json:"suspectCount"`
+	IssueCount       int     `json:"issueCount"`
+}
+
+// GetAlbumDetail retrieves full album details with all tracks and consistency analysis
+func (db *DB) GetAlbumDetail(ctx context.Context, albumName, artistName string) (*AlbumDetail, error) {
+	var tracks []AlbumTrack
+
+	err := db.SelectContext(ctx, &tracks, `
+		SELECT
+			t.id,
+			COALESCE(t.track_number, 0) as track_number,
+			COALESCE(t.disc_number, 1) as disc_number,
+			COALESCE(t.title, m.filename) as title,
+			t.duration,
+			t.codec,
+			t.sample_rate,
+			t.bit_depth,
+			COALESCE(t.bitrate, 0) as bitrate,
+			m.size as file_size,
+			m.path,
+			COALESCE(ar.lossless_status, 'pending') as lossless_status,
+			COALESCE(ar.lossless_score, 0) as lossless_score,
+			COALESCE(ar.integrity_ok, 1) as integrity_ok,
+			COALESCE(ar.clipped_samples, 0) as clipped_samples,
+			COALESCE(ar.peak_level, 0) as peak_level,
+			COALESCE(ar.integrated_loudness, 0) as integrated_loudness,
+			COALESCE(ar.loudness_range, 0) as loudness_range,
+			COALESCE(ar.crest_factor, 0) as crest_factor
+		FROM tracks t
+		JOIN media_files m ON t.media_file_id = m.id
+		LEFT JOIN analysis_results ar ON ar.track_id = t.id
+		WHERE t.album = ? AND COALESCE(t.album_artist, t.artist, '') = ?
+		ORDER BY t.disc_number, t.track_number, t.title
+	`, albumName, artistName)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(tracks) == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	// Calculate DR scores and collect stats for consistency analysis
+	codecCount := make(map[string]int)
+	sampleRateCount := make(map[int]int)
+	bitDepthCount := make(map[int]int)
+	var totalDR, totalLoudness float64
+	var drCount, loudnessCount int
+	var totalDuration float64
+	var totalSize int64
+	var year int
+	var suspectCount, issueCount int
+
+	for i := range tracks {
+		// Calculate DR score
+		dr := int(tracks[i].LoudnessRange + tracks[i].CrestFactor/2)
+		if dr < 1 {
+			dr = 1
+		}
+		if dr > 20 {
+			dr = 20
+		}
+		tracks[i].DRScore = dr
+
+		// Collect for averages
+		if tracks[i].LoudnessRange > 0 {
+			totalDR += float64(dr)
+			drCount++
+		}
+		if tracks[i].IntegratedLoudness != 0 {
+			totalLoudness += tracks[i].IntegratedLoudness
+			loudnessCount++
+		}
+
+		// Count for dominant detection
+		codecCount[tracks[i].Codec]++
+		sampleRateCount[tracks[i].SampleRate]++
+		bitDepthCount[tracks[i].BitDepth]++
+
+		totalDuration += tracks[i].Duration
+		totalSize += tracks[i].FileSize
+
+		// Track issues
+		if tracks[i].LosslessStatus == "warn" || tracks[i].LosslessStatus == "fail" {
+			tracks[i].IsSuspect = true
+			suspectCount++
+		}
+		if !tracks[i].IntegrityOK || tracks[i].ClippedSamples > 100 {
+			issueCount++
+		}
+	}
+
+	// Find dominant values (most common)
+	dominantCodec := findDominantString(codecCount)
+	dominantSampleRate := findDominantInt(sampleRateCount)
+	dominantBitDepth := findDominantInt(bitDepthCount)
+
+	avgDR := 0
+	if drCount > 0 {
+		avgDR = int(totalDR / float64(drCount))
+	}
+	avgLoudness := 0.0
+	if loudnessCount > 0 {
+		avgLoudness = totalLoudness / float64(loudnessCount)
+	}
+
+	// Mark outliers
+	for i := range tracks {
+		if tracks[i].Codec != dominantCodec {
+			tracks[i].IsCodecOutlier = true
+		}
+		if tracks[i].SampleRate != dominantSampleRate {
+			tracks[i].IsSampleRateOutlier = true
+		}
+		if tracks[i].BitDepth != dominantBitDepth {
+			tracks[i].IsBitDepthOutlier = true
+		}
+		// DR outlier if differs by more than 4 from average
+		if avgDR > 0 && (tracks[i].DRScore < avgDR-4 || tracks[i].DRScore > avgDR+4) {
+			tracks[i].IsDROutlier = true
+		}
+		// Loudness outlier if differs by more than 3 LUFS from average
+		if avgLoudness != 0 && tracks[i].IntegratedLoudness != 0 {
+			diff := tracks[i].IntegratedLoudness - avgLoudness
+			if diff < -3 || diff > 3 {
+				tracks[i].IsLoudnessOutlier = true
+			}
+		}
+	}
+
+	// Get artwork path
+	artworkPath, _ := db.GetAlbumArtwork(ctx, albumName)
+
+	// Get year from first track with a year
+	yearQuery := `SELECT COALESCE(MAX(year), 0) FROM tracks WHERE album = ?`
+	db.GetContext(ctx, &year, yearQuery, albumName)
+
+	consistency := AlbumConsistency{
+		IsConsistent:      len(codecCount) == 1 && len(sampleRateCount) == 1 && len(bitDepthCount) == 1 && suspectCount == 0,
+		DominantCodec:     dominantCodec,
+		DominantSampleRate: dominantSampleRate,
+		DominantBitDepth:  dominantBitDepth,
+		AvgDR:             avgDR,
+		AvgLoudness:       avgLoudness,
+		CodecVariety:      len(codecCount),
+		SampleRateVariety: len(sampleRateCount),
+		BitDepthVariety:   len(bitDepthCount),
+		SuspectCount:      suspectCount,
+		IssueCount:        issueCount,
+	}
+
+	return &AlbumDetail{
+		Name:          albumName,
+		Artist:        artistName,
+		Year:          year,
+		TrackCount:    len(tracks),
+		TotalDuration: totalDuration,
+		TotalSize:     totalSize,
+		ArtworkPath:   artworkPath,
+		Tracks:        tracks,
+		Consistency:   consistency,
+	}, nil
+}
+
+func findDominantString(counts map[string]int) string {
+	maxCount := 0
+	dominant := ""
+	for val, count := range counts {
+		if count > maxCount {
+			maxCount = count
+			dominant = val
+		}
+	}
+	return dominant
+}
+
+func findDominantInt(counts map[int]int) int {
+	maxCount := 0
+	dominant := 0
+	for val, count := range counts {
+		if count > maxCount {
+			maxCount = count
+			dominant = val
+		}
+	}
+	return dominant
+}

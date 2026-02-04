@@ -223,6 +223,22 @@ func main() {
 		pages.AlbumsPage(albums, total, settings).Render(ctx, w)
 	})
 
+	r.Get("/albums/{name}", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		albumName := chi.URLParam(r, "name")
+		artist := r.URL.Query().Get("artist")
+
+		album, err := db.GetAlbumDetail(ctx, albumName, artist)
+		if err != nil {
+			log.Error().Err(err).Str("album", albumName).Msg("Failed to get album detail")
+			http.Error(w, "Album not found", http.StatusNotFound)
+			return
+		}
+		settings, _ := db.GetAllSettings(ctx)
+
+		pages.AlbumDetailPage(album, settings).Render(ctx, w)
+	})
+
 	r.Get("/tracks/{id}", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		id := chi.URLParam(r, "id")

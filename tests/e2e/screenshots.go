@@ -52,6 +52,19 @@ func main() {
 		trackID = "6b6e7b79-eb0d-457e-b890-a72e7dd8bdd3" // Default track ID
 	}
 
+	// Get an album name for the album detail page
+	albumName := os.Getenv("OTTAVIA_ALBUM_NAME")
+	albumArtist := os.Getenv("OTTAVIA_ALBUM_ARTIST")
+	if albumName == "" {
+		albumName = "Unknown Album"
+	}
+
+	// Build album URL
+	albumURL := fmt.Sprintf("/albums/%s", albumName)
+	if albumArtist != "" {
+		albumURL = fmt.Sprintf("/albums/%s?artist=%s", albumName, albumArtist)
+	}
+
 	// Screenshots to capture
 	screenshots := []struct {
 		name     string
@@ -68,6 +81,10 @@ func main() {
 		{"tracks-dark", "/tracks", 1920, 1080, true, 500 * time.Millisecond, false},
 		{"track-detail-light", "/tracks/" + trackID, 1920, 1400, false, 500 * time.Millisecond, true},
 		{"track-detail-dark", "/tracks/" + trackID, 1920, 1400, true, 500 * time.Millisecond, true},
+		{"albums-light", "/albums", 1920, 1080, false, 500 * time.Millisecond, false},
+		{"albums-dark", "/albums", 1920, 1080, true, 500 * time.Millisecond, false},
+		{"album-detail-light", albumURL, 1920, 1400, false, 500 * time.Millisecond, true},
+		{"album-detail-dark", albumURL, 1920, 1400, true, 500 * time.Millisecond, true},
 		{"settings-light", "/settings", 1920, 1080, false, 500 * time.Millisecond, false},
 		{"settings-dark", "/settings", 1920, 1080, true, 500 * time.Millisecond, false},
 		{"dashboard-mobile", "/", 375, 812, false, 500 * time.Millisecond, false},

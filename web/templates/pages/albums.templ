@@ -2,6 +2,8 @@ package pages
 
 import (
 	"fmt"
+	"strings"
+	"net/url"
 	"github.com/ottavia-music/ottavia/web/templates/layouts"
 	"github.com/ottavia-music/ottavia/internal/database"
 )
@@ -79,7 +81,7 @@ templ AlbumsPage(albums []database.Album, total int, settings map[string]string)
 
 templ AlbumCard(album database.Album) {
 	<a
-		href={ templ.SafeURL(fmt.Sprintf("/tracks?album=%s", album.Name)) }
+		href={ templ.SafeURL(fmt.Sprintf("/albums/%s?artist=%s", url.PathEscape(album.Name), url.QueryEscape(album.Artist))) }
 		class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden hover:shadow-xl hover:border-gray-300/50 dark:hover:border-gray-700/50 transition-all duration-300 group block"
 	>
 		<!-- Album Art -->
@@ -232,4 +234,433 @@ func formatAlbumSize(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+func formatAlbumDuration(seconds float64) string {
+	total := int(seconds)
+	hrs := total / 3600
+	mins := (total % 3600) / 60
+	secs := total % 60
+	if hrs > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", hrs, mins, secs)
+	}
+	return fmt.Sprintf("%d:%02d", mins, secs)
+}
+
+func formatTrackDuration(seconds float64) string {
+	total := int(seconds)
+	mins := total / 60
+	secs := total % 60
+	return fmt.Sprintf("%d:%02d", mins, secs)
+}
+
+// AlbumDetailPage shows full album details with consistency analysis
+templ AlbumDetailPage(album *database.AlbumDetail, settings map[string]string) {
+	@layouts.Base(album.Name, settings) {
+		<!-- Breadcrumb -->
+		<nav class="flex items-center gap-2 text-sm mb-6">
+			<a href="/albums" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">Albums</a>
+			<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+			</svg>
+			<span class="text-gray-900 dark:text-white font-medium">{ album.Name }</span>
+		</nav>
+
+		<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+			<!-- Main Content -->
+			<div class="lg:col-span-2 space-y-6">
+				<!-- Album Header -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 p-6">
+					<div class="flex items-start gap-6">
+						<!-- Album Art -->
+						<div class="w-40 h-40 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex-shrink-0 overflow-hidden shadow-lg shadow-purple-500/25">
+							if album.ArtworkPath != "" {
+								<img
+									src={ fmt.Sprintf("/api/artifacts/%s", album.ArtworkPath) }
+									alt={ album.Name }
+									class="w-full h-full object-cover"
+								/>
+							} else {
+								<div class="w-full h-full flex items-center justify-center">
+									<svg class="w-20 h-20 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+									</svg>
+								</div>
+							}
+						</div>
+						<div class="flex-1 min-w-0">
+							<h1 class="text-2xl font-bold text-gray-900 dark:text-white">{ album.Name }</h1>
+							<p class="text-lg text-gray-600 dark:text-gray-300 mt-1">{ album.Artist }</p>
+							if album.Year > 0 {
+								<p class="text-gray-500 dark:text-gray-400 mt-1">{ fmt.Sprintf("%d", album.Year) }</p>
+							}
+							<div class="flex flex-wrap items-center gap-4 mt-4 text-sm text-gray-500 dark:text-gray-400">
+								<span>{ fmt.Sprintf("%d tracks", album.TrackCount) }</span>
+								<span>•</span>
+								<span>{ formatAlbumDuration(album.TotalDuration) }</span>
+								<span>•</span>
+								<span>{ formatAlbumSize(album.TotalSize) }</span>
+							</div>
+							<div class="flex flex-wrap items-center gap-2 mt-4">
+								<span class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-mono uppercase">{ strings.ToUpper(album.Consistency.DominantCodec) }</span>
+								<span class="text-sm text-gray-500 dark:text-gray-400">
+									{ fmt.Sprintf("%d kHz / %d-bit", album.Consistency.DominantSampleRate/1000, album.Consistency.DominantBitDepth) }
+								</span>
+								if album.Consistency.AvgDR > 0 {
+									@DRBadge(album.Consistency.AvgDR)
+								}
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Consistency Analysis -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							@ConsistencyIcon(album.Consistency.IsConsistent)
+							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Album Consistency</h2>
+						</div>
+						@ConsistencyBadge(album.Consistency.IsConsistent)
+					</div>
+					<div class="p-6">
+						if album.Consistency.IsConsistent {
+							<p class="text-sm text-emerald-700 dark:text-emerald-300 mb-4">
+								All tracks in this album have consistent technical properties - same codec, sample rate, and bit depth.
+							</p>
+						} else {
+							<p class="text-sm text-amber-700 dark:text-amber-300 mb-4">
+								This album contains tracks with inconsistent technical properties. Outliers are highlighted below.
+							</p>
+						}
+
+						<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+							<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+								<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Codec Variety</p>
+								<p class={ fmt.Sprintf("text-xl font-bold mt-1 %s", getVarietyColor(album.Consistency.CodecVariety)) }>
+									{ fmt.Sprintf("%d", album.Consistency.CodecVariety) }
+								</p>
+								<p class="text-xs text-gray-500 dark:text-gray-400">{ getVarietyText(album.Consistency.CodecVariety, "codec") }</p>
+							</div>
+							<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+								<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sample Rates</p>
+								<p class={ fmt.Sprintf("text-xl font-bold mt-1 %s", getVarietyColor(album.Consistency.SampleRateVariety)) }>
+									{ fmt.Sprintf("%d", album.Consistency.SampleRateVariety) }
+								</p>
+								<p class="text-xs text-gray-500 dark:text-gray-400">{ getVarietyText(album.Consistency.SampleRateVariety, "sample rate") }</p>
+							</div>
+							<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+								<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Bit Depths</p>
+								<p class={ fmt.Sprintf("text-xl font-bold mt-1 %s", getVarietyColor(album.Consistency.BitDepthVariety)) }>
+									{ fmt.Sprintf("%d", album.Consistency.BitDepthVariety) }
+								</p>
+								<p class="text-xs text-gray-500 dark:text-gray-400">{ getVarietyText(album.Consistency.BitDepthVariety, "bit depth") }</p>
+							</div>
+							<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+								<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Suspect Tracks</p>
+								<p class={ fmt.Sprintf("text-xl font-bold mt-1 %s", getSuspectColor(album.Consistency.SuspectCount)) }>
+									{ fmt.Sprintf("%d", album.Consistency.SuspectCount) }
+								</p>
+								<p class="text-xs text-gray-500 dark:text-gray-400">
+									if album.Consistency.SuspectCount == 0 {
+										All verified
+									} else {
+										possibly transcoded
+									}
+								</p>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Track List -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Tracks</h2>
+					</div>
+					<div class="overflow-x-auto">
+						<table class="w-full">
+							<thead>
+								<tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200/50 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-800/30">
+									<th class="px-4 py-3 w-12">#</th>
+									<th class="px-4 py-3">Title</th>
+									<th class="px-4 py-3">Format</th>
+									<th class="px-4 py-3">DR</th>
+									<th class="px-4 py-3">Loudness</th>
+									<th class="px-4 py-3">Duration</th>
+									<th class="px-4 py-3">Status</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-gray-200/50 dark:divide-gray-800/50">
+								for _, track := range album.Tracks {
+									@AlbumTrackRow(track, album.Consistency)
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+
+			<!-- Sidebar -->
+			<div class="space-y-6">
+				<!-- Quick Stats -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Quality Summary</h2>
+					</div>
+					<div class="p-6 space-y-3">
+						@AlbumAssessmentRow("Consistent Format", album.Consistency.CodecVariety == 1)
+						@AlbumAssessmentRow("Consistent Quality", album.Consistency.SampleRateVariety == 1 && album.Consistency.BitDepthVariety == 1)
+						@AlbumAssessmentRow("All Verified Lossless", album.Consistency.SuspectCount == 0)
+						@AlbumAssessmentRow("Good Dynamics", album.Consistency.AvgDR >= 10)
+						@AlbumAssessmentRow("No Issues", album.Consistency.IssueCount == 0)
+					</div>
+				</div>
+
+				<!-- Technical Info -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Dominant Format</h2>
+					</div>
+					<div class="p-6 space-y-4">
+						@AlbumMetadataRow("Codec", strings.ToUpper(album.Consistency.DominantCodec))
+						@AlbumMetadataRow("Sample Rate", fmt.Sprintf("%d Hz", album.Consistency.DominantSampleRate))
+						@AlbumMetadataRow("Bit Depth", fmt.Sprintf("%d-bit", album.Consistency.DominantBitDepth))
+						@AlbumMetadataRow("Avg. Loudness", fmt.Sprintf("%.1f LUFS", album.Consistency.AvgLoudness))
+						@AlbumMetadataRow("Avg. DR", fmt.Sprintf("DR%d", album.Consistency.AvgDR))
+					</div>
+				</div>
+
+				<!-- Legend -->
+				<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50">
+						<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Legend</h2>
+					</div>
+					<div class="p-6 space-y-3 text-sm">
+						<div class="flex items-center gap-2">
+							<span class="w-3 h-3 rounded-full bg-amber-500"></span>
+							<span class="text-gray-600 dark:text-gray-400">Format differs from album</span>
+						</div>
+						<div class="flex items-center gap-2">
+							<span class="w-3 h-3 rounded-full bg-purple-500"></span>
+							<span class="text-gray-600 dark:text-gray-400">Dynamics outlier</span>
+						</div>
+						<div class="flex items-center gap-2">
+							<span class="w-3 h-3 rounded-full bg-blue-500"></span>
+							<span class="text-gray-600 dark:text-gray-400">Loudness outlier</span>
+						</div>
+						<div class="flex items-center gap-2">
+							<span class="w-3 h-3 rounded-full bg-orange-500"></span>
+							<span class="text-gray-600 dark:text-gray-400">Possibly transcoded</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ AlbumTrackRow(track database.AlbumTrack, consistency database.AlbumConsistency) {
+	<tr class={ fmt.Sprintf("hover:bg-gray-50 dark:hover:bg-gray-800/50 %s", getTrackRowClass(track)) }>
+		<td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+			if track.DiscNumber > 1 {
+				{ fmt.Sprintf("%d.", track.DiscNumber) }
+			}
+			{ fmt.Sprintf("%d", track.TrackNumber) }
+		</td>
+		<td class="px-4 py-3">
+			<a href={ templ.SafeURL(fmt.Sprintf("/tracks/%s", track.ID)) } class="text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 font-medium">
+				{ track.Title }
+			</a>
+			<div class="flex flex-wrap gap-1 mt-1">
+				if track.IsCodecOutlier || track.IsSampleRateOutlier || track.IsBitDepthOutlier {
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300">
+						Format
+					</span>
+				}
+				if track.IsDROutlier {
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300">
+						DR
+					</span>
+				}
+				if track.IsLoudnessOutlier {
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300">
+						Loudness
+					</span>
+				}
+				if track.IsSuspect {
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300">
+						Suspect
+					</span>
+				}
+			</div>
+		</td>
+		<td class="px-4 py-3 text-sm">
+			<span class={ fmt.Sprintf("font-mono uppercase %s", getFormatColor(track, consistency)) }>{ strings.ToUpper(track.Codec) }</span>
+			<span class="text-gray-400 dark:text-gray-500 ml-1 text-xs">
+				{ fmt.Sprintf("%dk/%d", track.SampleRate/1000, track.BitDepth) }
+			</span>
+		</td>
+		<td class="px-4 py-3">
+			if track.DRScore > 0 {
+				@DRBadge(track.DRScore)
+			} else {
+				<span class="text-gray-400">—</span>
+			}
+		</td>
+		<td class="px-4 py-3 text-sm">
+			if track.IntegratedLoudness != 0 {
+				<span class={ getLoudnessColor(track.IsLoudnessOutlier) }>
+					{ fmt.Sprintf("%.1f", track.IntegratedLoudness) }
+				</span>
+				<span class="text-gray-400 dark:text-gray-500 text-xs ml-0.5">LUFS</span>
+			} else {
+				<span class="text-gray-400">—</span>
+			}
+		</td>
+		<td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+			{ formatTrackDuration(track.Duration) }
+		</td>
+		<td class="px-4 py-3">
+			@TrackStatusIcon(track)
+		</td>
+	</tr>
+}
+
+templ ConsistencyIcon(isConsistent bool) {
+	if isConsistent {
+		<div class="w-8 h-8 rounded-full flex items-center justify-center bg-emerald-100 dark:bg-emerald-500/20">
+			<svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+			</svg>
+		</div>
+	} else {
+		<div class="w-8 h-8 rounded-full flex items-center justify-center bg-amber-100 dark:bg-amber-500/20">
+			<svg class="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+			</svg>
+		</div>
+	}
+}
+
+templ ConsistencyBadge(isConsistent bool) {
+	if isConsistent {
+		<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+			<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+			</svg>
+			Consistent
+		</span>
+	} else {
+		<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">
+			<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01"></path>
+			</svg>
+			Inconsistent
+		</span>
+	}
+}
+
+templ TrackStatusIcon(track database.AlbumTrack) {
+	if !track.IntegrityOK {
+		<span class="w-6 h-6 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center" title="Integrity issues">
+			<svg class="w-3.5 h-3.5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+			</svg>
+		</span>
+	} else if track.IsSuspect {
+		<span class="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center" title="Possibly transcoded">
+			<svg class="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01"></path>
+			</svg>
+		</span>
+	} else if track.ClippedSamples > 0 {
+		<span class="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center" title="Clipping detected">
+			<svg class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+			</svg>
+		</span>
+	} else {
+		<span class="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center" title="OK">
+			<svg class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+			</svg>
+		</span>
+	}
+}
+
+templ AlbumAssessmentRow(label string, passed bool) {
+	<div class="flex items-center justify-between">
+		<span class="text-sm text-gray-600 dark:text-gray-300">{ label }</span>
+		if passed {
+			<span class="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+				</svg>
+				Pass
+			</span>
+		} else {
+			<span class="inline-flex items-center gap-1 text-sm font-medium text-amber-600 dark:text-amber-400">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01"></path>
+				</svg>
+				Check
+			</span>
+		}
+	</div>
+}
+
+templ AlbumMetadataRow(label, value string) {
+	<div class="flex justify-between gap-4">
+		<span class="text-sm text-gray-500 dark:text-gray-400 flex-shrink-0">{ label }</span>
+		<span class="text-sm text-gray-900 dark:text-white text-right font-medium">{ value }</span>
+	</div>
+}
+
+func getVarietyColor(variety int) string {
+	if variety == 1 {
+		return "text-emerald-600 dark:text-emerald-400"
+	}
+	return "text-amber-600 dark:text-amber-400"
+}
+
+func getVarietyText(variety int, kind string) string {
+	if variety == 1 {
+		return "consistent"
+	}
+	return fmt.Sprintf("different %ss", kind)
+}
+
+func getSuspectColor(count int) string {
+	if count == 0 {
+		return "text-emerald-600 dark:text-emerald-400"
+	}
+	return "text-orange-600 dark:text-orange-400"
+}
+
+func getTrackRowClass(track database.AlbumTrack) string {
+	if !track.IntegrityOK {
+		return "bg-red-50/50 dark:bg-red-500/5"
+	}
+	if track.IsCodecOutlier || track.IsSampleRateOutlier || track.IsBitDepthOutlier {
+		return "bg-amber-50/50 dark:bg-amber-500/5"
+	}
+	if track.IsSuspect {
+		return "bg-orange-50/50 dark:bg-orange-500/5"
+	}
+	return ""
+}
+
+func getFormatColor(track database.AlbumTrack, consistency database.AlbumConsistency) string {
+	if track.IsCodecOutlier || track.IsSampleRateOutlier || track.IsBitDepthOutlier {
+		return "text-amber-600 dark:text-amber-400"
+	}
+	return "text-gray-900 dark:text-white"
+}
+
+func getLoudnessColor(isOutlier bool) string {
+	if isOutlier {
+		return "text-blue-600 dark:text-blue-400 font-medium"
+	}
+	return "text-gray-900 dark:text-white"
 }

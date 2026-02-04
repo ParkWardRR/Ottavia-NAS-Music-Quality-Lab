@@ -37,7 +37,7 @@
 - [x] Quick Assessment sidebar with Pass/Fail indicators
 - [x] Visual DR scale (Crushed → Limited → Moderate → Good → Excellent)
 - [x] Album page overhaul with album art, quality badges, and DR scores
-- [ ] Album-level consistency view (spot outliers across an album)
+- [x] Album-level consistency view (spot outliers across an album)
 
 ## Phase 4 — Metadata editor + audit 🔄 IN PROGRESS
 - [x] Full metadata audit (missing/inconsistent tags, artwork checks)
@@ -80,6 +80,17 @@
 
 ## Recent Accomplishments (Feb 2026)
 
+### Album-Level Consistency View
+- Full album detail page with artwork and metadata
+- Consistency analysis showing dominant format across tracks
+- Outlier detection for codec, sample rate, and bit depth
+- DR score outlier detection (tracks differing >4 from album average)
+- Loudness outlier detection (tracks differing >3 LUFS from average)
+- Suspect track highlighting (possible transcodes)
+- Quality summary sidebar with pass/check indicators
+- Technical info showing dominant format
+- Legend explaining outlier indicators
+
 ### Pro-Level Track Analysis Page
 - Quality Summary with badges (Authenticity, Integrity, Dynamics, Clipping)
 - Quick Assessment sidebar with Pass/Fail indicators
@@ -93,6 +104,7 @@
 - Dashboard showing 109+ tracks across multiple libraries
 - Tracks page with populated music collection
 - Track detail page showcasing all analysis features
+- Album detail page with consistency analysis
 - Dark and light mode variants
 - Mobile responsive view
 
