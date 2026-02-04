@@ -80,6 +80,7 @@ type PhaseSeries struct {
 	MinCorrelation float32 `msgpack:"minCorrelation"`
 	AvgCorrelation float32 `msgpack:"avgCorrelation"`
 	MaxImbalanceDb float32 `msgpack:"maxImbalanceDb"`
+	PhaseIssue     bool    `msgpack:"phaseIssue"` // true if persistent negative correlation detected
 }
 
 // DynamicsSeries represents dynamics/DR over time raw data (v1)
