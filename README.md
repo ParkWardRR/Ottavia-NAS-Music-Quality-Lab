@@ -43,42 +43,55 @@
 
 ## ✨ Features
 
-### 🔍 **Lossless Verification**
+### 🔍 **Lossless Authenticity Verification**
 - Detects files that may have been transcoded from lossy sources
-- Analyzes high-frequency content and spectral characteristics
-- Provides confidence scores with detailed evidence
+- Analyzes high-frequency cutoff and spectral rolloff characteristics
+- Provides confidence scores (0-100%) with plain-English explanations
+- Visual "Verified" or "Suspicious" badges for quick assessment
+- Evidence export for further analysis
 
-### 📊 **Audio Analysis**
-- Peak level and true peak detection
-- Clipping detection with sample counts
-- Loudness measurement (LUFS/LRA)
+### 📊 **Pro-Level Audio Analysis**
+- Peak level and true peak detection (dBFS)
+- Clipping detection with exact sample counts
+- Loudness measurement (Integrated LUFS and Loudness Range)
 - DC offset and phase correlation analysis
-- Waveform and spectrogram visualization
+- Waveform visualization with peak markers
+- Spectrogram artifact generation
+- File integrity verification (detects truncated/corrupted streams)
+
+### 📈 **Dynamic Range (DR) Scoring**
+- Industry-standard DR measurement for "loudness war" detection
+- Visual DR scale from "Crushed" to "Excellent"
+- Color-coded badges (DR14+ = Excellent, DR8-13 = Good, etc.)
+- Human-readable explanations for audiophiles and beginners
+- Quick assessment sidebar with Pass/Fail indicators
 
 ### 🏷️ **Metadata Management**
-- Comprehensive tag auditing
+- Comprehensive tag auditing (title, artist, album, year, genre, etc.)
 - Missing/inconsistent tag detection
-- Artwork analysis and management
-- Bulk editing with diff preview
-- Safe atomic writes with action logging
+- Artwork presence and dimension analysis
+- Tag display in track detail view
+- Album-level quality badges
 
 ### 🔄 **Format Conversion**
-- Built-in conversion profiles (iPod, Red Book)
-- Queue-based job processing
-- Provenance tracking
-- Re-verification after conversion
+- Built-in conversion profiles (iPod, Red Book compatible)
+- Queue-based job processing with worker pool
+- Background processing with progress tracking
+- Scan interval configuration per library
 
-### 🖥️ **Modern UI**
-- Clean, professional design
-- Dark/Light theme support
-- Responsive layout
-- Real-time updates
+### 🖥️ **Modern Apple-Inspired UI**
+- Clean, professional glassmorphism design
+- Dark/Light theme with system preference detection
+- Responsive layout (desktop, tablet, mobile)
+- Real-time updates with HTMX
+- Beautiful gradient accents and smooth animations
 
-### 📈 **Loudness War Analysis**
-- Dynamic Range (DR) scoring
-- Visual DR scale with color coding
-- Clipping detection and sample counts
-- Human-readable explanations for audiophiles and beginners
+### 🏠 **Self-Hosted & NAS-Friendly**
+- Single binary deployment
+- SQLite database (no external dependencies)
+- Low resource footprint
+- Works great on Synology, QNAP, Unraid, TrueNAS
+- Tested on AlmaLinux, Ubuntu, macOS
 
 ---
 
@@ -100,6 +113,12 @@
   <img src="screenshots/tracks-light.png" alt="Tracks" width="100%">
   <br>
   <em>Tracks Browser</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/track-detail-dark.png" alt="Track Analysis" width="100%">
+  <br>
+  <em>Pro-Level Track Analysis - Dark Mode</em>
 </p>
 
 <p align="center">
@@ -376,15 +395,23 @@ make lint
 
 ## 🗺️ Roadmap
 
-- [x] Phase 0: Project foundation + branding
-- [x] Phase 1: Scanner MVP
-- [x] Phase 2: Probe + audio analysis
-- [x] Phase 3: Lossy detection + dynamic range scoring
-- [ ] Phase 4: Metadata editor + bulk operations
-- [ ] Phase 5: Conversion queue + progress UI
-- [ ] Phase 6: Hardening + production deployment
+- [x] **Phase 0**: Project foundation + Ottavia branding
+- [x] **Phase 1**: Scanner MVP with job queue
+- [x] **Phase 2**: FFprobe integration + audio analysis
+- [x] **Phase 3**: Lossy detection + DR scoring + album overhaul
+- [ ] **Phase 4**: Metadata editor + bulk operations
+- [ ] **Phase 5**: Conversion queue + progress UI
+- [ ] **Phase 6**: Hardening + production deployment
 
-See [roadmap.md](roadmap.md) for details.
+### Recently Completed
+- Pro-level track analysis page with quality badges
+- Lossless authenticity verification with confidence scores
+- Dynamic Range (DR) scoring with visual scale
+- Quick Assessment sidebar with Pass/Fail indicators
+- Screenshots with populated music data
+- Nginx reverse proxy deployment on AlmaLinux
+
+See [roadmap.md](roadmap.md) for detailed progress.
 
 ---
 
