@@ -236,22 +236,23 @@ func (s *Scanner) extractLoudnessSeries(ctx context.Context, path string, durati
 // extractClippingSeries detects clipping over time
 func (s *Scanner) extractClippingSeries(ctx context.Context, path string, duration float64) (*ClippingSeries, error) {
 	// Use astats with ametadata to get per-frame peak levels
-	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
+	// FFmpeg 7.x: use ametadata=mode=print:file=- to output to stdout (cleaner parsing)
 	args := []string{
-		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "astats=metadata=1:measure_perchannel=Peak_level:measure_overall=none,ametadata=print",
+		"-af", "astats=metadata=1:measure_perchannel=Peak_level:measure_overall=none:reset=1,ametadata=mode=print:file=-",
 		"-f", "null",
 		"-",
 	}
 
 	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Run()
 
-	output := stderr.String()
+	// ametadata outputs to stdout with file=-
+	output := stdout.String()
 
 	series := &ClippingSeries{
 		Version:       RawDataVersion,
@@ -259,20 +260,45 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 	}
 
 	// Parse ametadata output for per-frame peak levels
-	// Format: lavfi.astats.1.Peak_level=-18.063656
-	framePattern := regexp.MustCompile(`frame:\d+\s+pts:\d+\s+pts_time:([\d.]+)`)
+	// FFmpeg 7.x format (to stdout):
+	// frame:0    pts:0       pts_time:0
+	// lavfi.astats.1.Peak_level=-18.063656
+	// lavfi.astats.2.Peak_level=-22.345678
+	framePattern := regexp.MustCompile(`frame:\s*\d+\s+pts:\s*\d+\s+pts_time:\s*([\d.]+)`)
 	peakPattern := regexp.MustCompile(`lavfi\.astats\.\d+\.Peak_level=([-\d.inf]+)`)
 
 	lines := strings.Split(output, "\n")
 	var currentTime float32 = 0
 	var maxPeak float32 = -100
+	var frameHasPeak bool = false
+	var framePeak float32 = -100
 
 	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
 		// Extract timestamp from frame line
 		if m := framePattern.FindStringSubmatch(line); len(m) > 1 {
+			// Save previous frame's data before moving to next
+			if frameHasPeak && (len(series.TSec) == 0 || currentTime-series.TSec[len(series.TSec)-1] >= 0.02) {
+				series.TSec = append(series.TSec, currentTime)
+				clipped := 0
+				if framePeak >= float32(series.ThresholdDbFS) {
+					clipped = 1
+					series.TotalClipped++
+				}
+				series.ClippedSamples = append(series.ClippedSamples, clipped)
+				series.OversCount = append(series.OversCount, 0)
+				if framePeak > maxPeak {
+					maxPeak = framePeak
+				}
+			}
+
+			// Start new frame
 			if t, err := strconv.ParseFloat(m[1], 32); err == nil {
 				currentTime = float32(t)
 			}
+			frameHasPeak = false
+			framePeak = -100
 		}
 
 		// Extract peak level
@@ -282,25 +308,24 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 			}
 			if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 				peak := float32(v)
-				if peak > maxPeak {
-					maxPeak = peak
-				}
-
-				// Only add data point if we have enough time spacing (avoid duplicates)
-				if len(series.TSec) == 0 || currentTime-series.TSec[len(series.TSec)-1] >= 0.02 {
-					series.TSec = append(series.TSec, currentTime)
-
-					// Count as clipped if peak >= threshold
-					clipped := 0
-					if peak >= float32(series.ThresholdDbFS) {
-						clipped = 1
-						series.TotalClipped++
-					}
-					series.ClippedSamples = append(series.ClippedSamples, clipped)
-					series.OversCount = append(series.OversCount, 0)
+				frameHasPeak = true
+				if peak > framePeak {
+					framePeak = peak
 				}
 			}
 		}
+	}
+
+	// Save last frame
+	if frameHasPeak && (len(series.TSec) == 0 || currentTime-series.TSec[len(series.TSec)-1] >= 0.02) {
+		series.TSec = append(series.TSec, currentTime)
+		clipped := 0
+		if framePeak >= float32(series.ThresholdDbFS) {
+			clipped = 1
+			series.TotalClipped++
+		}
+		series.ClippedSamples = append(series.ClippedSamples, clipped)
+		series.OversCount = append(series.OversCount, 0)
 	}
 
 	// Find worst section
@@ -319,22 +344,23 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 func (s *Scanner) extractPhaseSeries(ctx context.Context, path string, duration float64) (*PhaseSeries, error) {
 	// Use aphasemeter for actual phase correlation measurement
 	// Combined with astats for L/R balance calculation
-	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
+	// FFmpeg 7.x: use ametadata=mode=print:file=- to output to stdout
 	args := []string{
-		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "aphasemeter=video=0,astats=metadata=1:measure_perchannel=RMS_level:measure_overall=none,ametadata=print",
+		"-af", "aphasemeter=video=0,astats=metadata=1:measure_perchannel=RMS_level:measure_overall=none:reset=1,ametadata=mode=print:file=-",
 		"-f", "null",
 		"-",
 	}
 
 	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Run()
 
-	output := stderr.String()
+	// ametadata outputs to stdout with file=-
+	output := stdout.String()
 
 	series := &PhaseSeries{
 		Version:        RawDataVersion,
@@ -447,22 +473,23 @@ func abs32(x float32) float32 {
 // extractDynamicsSeries analyzes dynamics over time
 func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, duration float64) (*DynamicsSeries, error) {
 	// Use astats with ametadata for per-frame RMS, peak, and crest factor
-	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
+	// FFmpeg 7.x: use ametadata=mode=print:file=- to output to stdout
 	args := []string{
-		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "astats=metadata=1:measure_perchannel=Peak_level+RMS_level+Crest_factor:measure_overall=none,ametadata=print",
+		"-af", "astats=metadata=1:measure_perchannel=Peak_level+RMS_level+Crest_factor:measure_overall=none:reset=1,ametadata=mode=print:file=-",
 		"-f", "null",
 		"-",
 	}
 
 	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Run()
 
-	output := stderr.String()
+	// ametadata outputs to stdout with file=-
+	output := stdout.String()
 
 	series := &DynamicsSeries{
 		Version:    RawDataVersion,
