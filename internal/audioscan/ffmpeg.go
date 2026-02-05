@@ -5,11 +5,141 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/rs/zerolog/log"
 )
+
+// Retry configuration for unstable NAS connections
+const (
+	maxRetries     = 5
+	initialBackoff = 1 * time.Second
+	maxBackoff     = 16 * time.Second
+)
+
+// isRetryableError checks if an error indicates a temporary file access issue
+// that should be retried (e.g., NAS temporarily unavailable)
+func isRetryableError(stderr string, err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for common NAS/network filesystem errors
+	retryablePatterns := []string{
+		"No such file or directory",
+		"Input/output error",
+		"Stale file handle",
+		"Resource temporarily unavailable",
+		"Connection timed out",
+		"Transport endpoint is not connected",
+		"Network is unreachable",
+		"Permission denied", // Sometimes transient on NFS
+	}
+	for _, pattern := range retryablePatterns {
+		if strings.Contains(stderr, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkFileAccessible verifies file exists before running FFmpeg
+// Returns nil if accessible, error otherwise
+func checkFileAccessible(path string) error {
+	_, err := os.Stat(path)
+	return err
+}
+
+// runFFmpegWithRetry executes an FFmpeg command with retry logic for NAS instability
+func runFFmpegWithRetry(ctx context.Context, ffmpegPath string, args []string, captureStdout bool) (stdout, stderr string, err error) {
+	var stdoutBuf, stderrBuf bytes.Buffer
+	backoff := initialBackoff
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Check if file is accessible before trying FFmpeg
+		// The input file is typically the second argument after "-i"
+		for i, arg := range args {
+			if arg == "-i" && i+1 < len(args) {
+				if fileErr := checkFileAccessible(args[i+1]); fileErr != nil {
+					if attempt < maxRetries {
+						log.Warn().
+							Str("path", args[i+1]).
+							Int("attempt", attempt+1).
+							Dur("backoff", backoff).
+							Msg("File not accessible, waiting for NAS...")
+						select {
+						case <-ctx.Done():
+							return "", "", ctx.Err()
+						case <-time.After(backoff):
+						}
+						backoff *= 2
+						if backoff > maxBackoff {
+							backoff = maxBackoff
+						}
+						continue
+					}
+					return "", "", fmt.Errorf("file not accessible after %d retries: %w", maxRetries, fileErr)
+				}
+				break
+			}
+		}
+
+		stdoutBuf.Reset()
+		stderrBuf.Reset()
+
+		cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+		if captureStdout {
+			cmd.Stdout = &stdoutBuf
+		}
+		cmd.Stderr = &stderrBuf
+
+		err = cmd.Run()
+		stdout = stdoutBuf.String()
+		stderr = stderrBuf.String()
+
+		if err == nil {
+			return stdout, stderr, nil
+		}
+
+		// Check if this is a retryable error
+		if isRetryableError(stderr, err) && attempt < maxRetries {
+			log.Warn().
+				Err(err).
+				Int("attempt", attempt+1).
+				Dur("backoff", backoff).
+				Str("stderr", truncateString(stderr, 200)).
+				Msg("FFmpeg failed with retryable error, retrying...")
+
+			select {
+			case <-ctx.Done():
+				return stdout, stderr, ctx.Err()
+			case <-time.After(backoff):
+			}
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+
+		// Non-retryable error or max retries reached
+		break
+	}
+
+	return stdout, stderr, err
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
 
 // extractSpectrumCurve uses FFmpeg to extract frequency spectrum data
 func (s *Scanner) extractSpectrumCurve(ctx context.Context, path string, fftSize int, duration float64) ([]float32, []float32, error) {
@@ -25,12 +155,10 @@ func (s *Scanner) extractSpectrumCurve(ctx context.Context, path string, fftSize
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		// If showfreqs isn't available, fall back to generating synthetic data from astats
+	// Use retry logic for unstable NAS connections
+	_, _, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, false)
+	if err != nil {
+		// If showfreqs isn't available or fails, fall back to generating synthetic data from astats
 		return s.extractSpectrumFromStats(ctx, path, fftSize, duration)
 	}
 
@@ -50,10 +178,8 @@ func (s *Scanner) extractSpectrumFromStats(ctx context.Context, path string, fft
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Run() // Ignore error, we'll parse what we can
+	// Use retry logic for unstable NAS connections (ignore errors, we'll generate synthetic data)
+	runFFmpegWithRetry(ctx, s.ffmpegPath, args, false)
 
 	// For now, generate a synthetic spectrum curve based on the track's sample rate
 	// In production, this would parse actual FFT data from the audio
@@ -94,12 +220,8 @@ func (s *Scanner) calculateDC(ctx context.Context, path string, duration float64
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Run()
-
-	output := stderr.String()
+	// Use retry logic for unstable NAS connections
+	_, output, _ := runFFmpegWithRetry(ctx, s.ffmpegPath, args, false)
 
 	// Parse DC offset from astats output
 	dcPattern := regexp.MustCompile(`DC offset:\s*([-\d.]+)`)
@@ -126,15 +248,11 @@ func (s *Scanner) extractLoudnessSeries(ctx context.Context, path string, durati
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
+	// Use retry logic for unstable NAS connections
+	_, output, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, false)
+	if err != nil {
 		return nil, fmt.Errorf("ebur128 analysis failed: %w", err)
 	}
-
-	output := stderr.String()
 
 	series := &LoudnessSeries{
 		Version:   RawDataVersion,
@@ -245,14 +363,11 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	cmd.Run()
-
-	// ametadata outputs to stdout with file=-
-	output := stdout.String()
+	// Use retry logic for unstable NAS connections (captures stdout for ametadata output)
+	output, _, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, true)
+	if err != nil {
+		return nil, fmt.Errorf("clipping analysis failed: %w", err)
+	}
 
 	series := &ClippingSeries{
 		Version:       RawDataVersion,
@@ -353,14 +468,11 @@ func (s *Scanner) extractPhaseSeries(ctx context.Context, path string, duration 
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	cmd.Run()
-
-	// ametadata outputs to stdout with file=-
-	output := stdout.String()
+	// Use retry logic for unstable NAS connections (captures stdout for ametadata output)
+	output, _, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, true)
+	if err != nil {
+		return nil, fmt.Errorf("phase analysis failed: %w", err)
+	}
 
 	series := &PhaseSeries{
 		Version:        RawDataVersion,
@@ -482,14 +594,11 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	cmd.Run()
-
-	// ametadata outputs to stdout with file=-
-	output := stdout.String()
+	// Use retry logic for unstable NAS connections (captures stdout for ametadata output)
+	output, _, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, true)
+	if err != nil {
+		return nil, fmt.Errorf("dynamics analysis failed: %w", err)
+	}
 
 	series := &DynamicsSeries{
 		Version:    RawDataVersion,
