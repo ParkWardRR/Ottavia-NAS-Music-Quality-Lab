@@ -176,7 +176,9 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 						<div class="mt-6 pt-6 border-t border-gray-200/50 dark:border-gray-800/50">
 							<h3 class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Quality Summary</h3>
 							<div class="flex flex-wrap gap-2">
-								@TrackQualityBadge("Authenticity", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
+								if isLosslessFormat(track.Codec) {
+									@TrackQualityBadge("Authenticity", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
+								}
 								@TrackQualityBadge("Integrity", getIntegrityStatus(analysis), getIntegrityShortLabel(analysis))
 								@TrackQualityBadge("Dynamics", getDRStatus(analysis), fmt.Sprintf("DR%d", calculateDR(analysis)))
 								@TrackQualityBadge("Clipping", getClippingStatus(analysis), getClippingShortLabel(analysis))
@@ -186,39 +188,41 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 				</div>
 
 				if analysis != nil {
-					<!-- Lossless Authenticity Analysis -->
-					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
-						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
-							<div class="flex items-center gap-3">
-								@StatusIcon(analysis.LosslessStatus)
-								<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Lossless Authenticity</h2>
-							</div>
-							@TrackQualityBadge("", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
-						</div>
-						<div class="p-6">
-							<p class={ fmt.Sprintf("text-sm mb-4 %s", getLosslessTextColor(analysis.LosslessStatus)) }>
-								{ getLosslessExplanation(analysis, track) }
-							</p>
-							<div class="grid grid-cols-2 gap-4">
-								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">High Freq Cutoff</p>
-									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">
-										if analysis.HighFreqCutoff > 0 {
-											{ fmt.Sprintf("%.1f kHz", analysis.HighFreqCutoff/1000) }
-										} else {
-											N/A
-										}
-									</p>
-									<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Expected: { fmt.Sprintf("%.1f kHz", float64(track.SampleRate)/2000) }</p>
+					if isLosslessFormat(track.Codec) {
+						<!-- Lossless Authenticity Analysis - only shown for lossless formats -->
+						<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+							<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+								<div class="flex items-center gap-3">
+									@StatusIcon(analysis.LosslessStatus)
+									<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Lossless Authenticity</h2>
 								</div>
-								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Confidence Score</p>
-									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.0f%%", analysis.LosslessScore) }</p>
-									<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{ getConfidenceText(analysis.LosslessScore) }</p>
+								@TrackQualityBadge("", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
+							</div>
+							<div class="p-6">
+								<p class={ fmt.Sprintf("text-sm mb-4 %s", getLosslessTextColor(analysis.LosslessStatus)) }>
+									{ getLosslessExplanation(analysis, track) }
+								</p>
+								<div class="grid grid-cols-2 gap-4">
+									<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+										<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">High Freq Cutoff</p>
+										<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">
+											if analysis.HighFreqCutoff > 0 {
+												{ fmt.Sprintf("%.1f kHz", analysis.HighFreqCutoff/1000) }
+											} else {
+												N/A
+											}
+										</p>
+										<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Expected: { fmt.Sprintf("%.1f kHz", float64(track.SampleRate)/2000) }</p>
+									</div>
+									<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+										<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Confidence Score</p>
+										<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.0f%%", analysis.LosslessScore) }</p>
+										<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{ getConfidenceText(analysis.LosslessScore) }</p>
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
+					}
 
 					<!-- Dynamic Range (Loudness War) Analysis -->
 					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
@@ -397,7 +401,11 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Quick Assessment</h2>
 						</div>
 						<div class="p-6 space-y-3">
-							@AssessmentRow("Lossless", analysis.LosslessStatus == "pass")
+							if isLosslessFormat(track.Codec) {
+								@AssessmentRow("Authentic Lossless", analysis.LosslessStatus == "pass")
+							} else {
+								@AssessmentRow("Lossy Format", true)
+							}
 							@AssessmentRow("No Clipping", analysis.ClippedSamples == 0)
 							@AssessmentRow("Good Dynamics", calculateDR(analysis) >= 10)
 							@AssessmentRow("File Integrity", analysis.IntegrityOK)
@@ -855,6 +863,16 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// isLosslessFormat returns true for lossless audio codecs where authenticity checking makes sense
+func isLosslessFormat(codec string) bool {
+	switch strings.ToLower(codec) {
+	case "flac", "alac", "wav", "aiff", "ape", "wv", "wavpack", "tta", "dsd", "dsf", "dff":
+		return true
+	default:
+		return false
+	}
 }
 
 func getArtifactPrefix(trackID string) string {
