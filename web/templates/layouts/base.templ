@@ -1,6 +1,8 @@
 package layouts
 
-import "github.com/ottavia-music/ottavia/web/templates/components"
+import (
+	"github.com/ottavia-music/ottavia/web/templates/components"
+)
 
 templ Base(title string, settings map[string]string) {
 	<!DOCTYPE html>
@@ -55,7 +57,12 @@ templ Base(title string, settings map[string]string) {
 					</div>
 				</main>
 			</div>
+
+			<!-- Wizard Modal (rendered at root level for proper z-index) -->
+			@components.WizardModal()
+
 			<script src="/static/js/app.js"></script>
+			<script src="/static/js/wizards.js"></script>
 			<script src="/static/js/ottavia-charts.js"></script>
 		</body>
 	</html>
