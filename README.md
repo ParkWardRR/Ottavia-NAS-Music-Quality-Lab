@@ -523,6 +523,7 @@ GET /api/jobs/:id/logs?since=10
 - [x] **Phase 7**: Audio Scan-style analysis with raw data manifests
 - [x] **Phase 8**: Dynamic evidence graphs (interactive canvas charts)
 - [x] **Phase 9**: Verbose job logging + bulk audio scan operations
+- [x] **Phase 9.5**: FFmpeg 7.x compatibility + code quality improvements
 
 See [roadmap.md](roadmap.md) for detailed progress.
 
@@ -535,7 +536,7 @@ See [roadmap.md](roadmap.md) for detailed progress.
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Interactivity**: [Alpine.js](https://alpinejs.dev/) + [HTMX](https://htmx.org/)
 - **Database**: SQLite with WAL mode
-- **Audio Analysis**: FFmpeg / FFprobe
+- **Audio Analysis**: FFmpeg / FFprobe (6.x and 7.x compatible)
 - **Data Compression**: MessagePack + Zstandard (zstd)
 - **Charts**: Custom Canvas renderer with LTTB decimation
 

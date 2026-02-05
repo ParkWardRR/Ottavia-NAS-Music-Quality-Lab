@@ -5,6 +5,7 @@
 *.so
 *.dylib
 ottavia
+server
 bin/
 
 # Build artifacts
