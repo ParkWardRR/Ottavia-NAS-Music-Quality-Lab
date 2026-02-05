@@ -135,6 +135,16 @@
 | `cmd/server/main.go` | Registered new API routes |
 | `web/templates/pages/tracks.templ` | Added real-time log viewer panel |
 
+## Phase 9.5 — FFmpeg 7.x Compatibility ✅ COMPLETE
+- [x] Per-frame metadata extraction using `ametadata=print` filter
+- [x] Clipping detection with `astats+ametadata` pipeline
+- [x] Phase correlation with `aphasemeter+astats+ametadata` pipeline
+- [x] Dynamics analysis with per-frame crest factor
+- [x] Backward compatibility with FFmpeg 6.x
+- [x] Fixed empty chart data for all analysis modules
+- [x] Exponential backoff overflow fix (capped at 1 hour)
+- [x] Improved error handling throughout codebase
+
 ## Phase 10 — Future Enhancements (Planned)
 - [ ] Spectrogram heatmap from raw matrix (visual FFT over time)
 - [ ] MusicBrainz integration (MBID/ISRC lookup)
@@ -145,6 +155,8 @@
 - [ ] Duplicate detection across libraries
 - [ ] Automated cleanup workflows
 - [ ] Mobile companion app (PWA)
+- [ ] Rate limiting and request size limits
+- [ ] CORS configuration hardening
 
 ## Testing & Documentation ✅ MOSTLY COMPLETE
 - [x] Playwright-go E2E test setup
@@ -169,12 +181,13 @@
 | Phase 3 - Lossy Detection | ✅ Complete | 100% |
 | Phase 4 - Metadata Editor | ✅ Complete | 95% |
 | Phase 5 - Conversion Queue | ✅ Mostly Complete | 80% |
-| Phase 6 - Hardening | 🔄 In Progress | 40% |
+| Phase 6 - Hardening | 🔄 In Progress | 45% |
 | Phase 7 - Audio Scan | ✅ Complete | 100% |
-| Phase 8 - Dynamic Charts | ✅ Complete | 95% |
+| Phase 8 - Dynamic Charts | ✅ Complete | 100% |
 | Phase 9 - Verbose Logging | ✅ Complete | 100% |
+| Phase 9.5 - FFmpeg 7.x | ✅ Complete | 100% |
 
-**Overall Progress: ~90%**
+**Overall Progress: ~92%**
 
 ---
 
@@ -288,6 +301,23 @@
 - Each panel shows interactive chart + key metrics
 - "Download raw data" links for advanced analysis
 - "Run Audio Scan" button when analysis not yet performed
+
+### FFmpeg 7.x Compatibility (Feb 2026)
+- Fixed per-frame data extraction for FFmpeg 7.x
+- Uses `ametadata=print` filter to output per-frame lavfi metadata
+- Clipping detection: `astats+ametadata` for per-frame peak levels
+- Phase correlation: `aphasemeter+astats+ametadata` for real correlation values
+- Dynamics analysis: `astats+ametadata` for per-frame crest factor and RMS
+- Backward compatible with FFmpeg 6.x and earlier
+- Fixed empty chart data issues when running on newer FFmpeg versions
+
+### Code Quality Improvements (Feb 2026)
+- Fixed exponential backoff overflow (capped at 1 hour maximum)
+- Improved integer parsing with proper error handling
+- Added error logging for database job updates
+- Fixed sql.NullString handling in scanner logging
+- Unified project naming from "seville" to "ottavia"
+- Added build artifacts to .gitignore
 
 ### Verbose Job Logging & Bulk Operations System
 A comprehensive real-time logging system for tracking audio scan progress with detailed diagnostics.

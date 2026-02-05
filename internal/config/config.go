@@ -51,7 +51,7 @@ func DefaultConfig() *Config {
 		},
 		Database: DatabaseConfig{
 			Driver: "sqlite3",
-			DSN:    "./seville.db",
+			DSN:    "./ottavia.db",
 		},
 		Scanner: ScannerConfig{
 			DefaultInterval:  "15m",

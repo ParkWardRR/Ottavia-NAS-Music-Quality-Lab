@@ -920,7 +920,9 @@ func (h *Handler) GetJobLogs(w http.ResponseWriter, r *http.Request) {
 
 	var sinceIndex int
 	if sinceStr != "" {
-		fmt.Sscanf(sinceStr, "%d", &sinceIndex)
+		if parsed, err := strconv.Atoi(sinceStr); err == nil {
+			sinceIndex = parsed
+		}
 	}
 
 	entries, nextIndex, status := globalJobLogger.GetLogSince(jobID, sinceIndex)
@@ -941,7 +943,9 @@ func (h *Handler) ListJobLogs(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	limit := 20
 	if limitStr != "" {
-		fmt.Sscanf(limitStr, "%d", &limit)
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
 	}
 
 	if globalJobLogger == nil {

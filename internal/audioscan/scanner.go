@@ -91,7 +91,11 @@ func (s *Scanner) ScanTrackWithLogger(ctx context.Context, trackID string, jobID
 		return fmt.Errorf("get track: %w", err)
 	}
 
-	logInfo("", fmt.Sprintf("Track: %s", track.Title))
+	title := track.Title.String
+	if !track.Title.Valid {
+		title = track.ID
+	}
+	logInfo("", fmt.Sprintf("Track: %s", title))
 	logDebug("", "Track details", fmt.Sprintf("Path: %s, Duration: %.1fs, Sample Rate: %dHz, Channels: %d, Codec: %s",
 		track.Path, track.Duration, track.SampleRate, track.Channels, track.Codec))
 

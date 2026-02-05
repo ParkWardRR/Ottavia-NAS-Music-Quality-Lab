@@ -155,8 +155,12 @@ func (w *Worker) processNextJob(ctx context.Context, workerID int) {
 			job.Status = models.StatusFailed
 			job.FinishedAt = sql.NullTime{Time: time.Now(), Valid: true}
 		} else {
-			// Exponential backoff for retry
-			backoff := time.Duration(1<<uint(job.Attempts)) * time.Minute
+			// Exponential backoff for retry (capped at 1 hour)
+			backoffMinutes := 1 << uint(job.Attempts)
+			if backoffMinutes > 60 {
+				backoffMinutes = 60
+			}
+			backoff := time.Duration(backoffMinutes) * time.Minute
 			job.Status = models.StatusQueued
 			job.ScheduledAt = time.Now().Add(backoff)
 		}
@@ -167,7 +171,9 @@ func (w *Worker) processNextJob(ctx context.Context, workerID int) {
 		logger.EndJob(job.ID, true, "")
 	}
 
-	w.db.UpdateJob(ctx, job)
+	if err := w.db.UpdateJob(ctx, job); err != nil {
+		log.Error().Err(err).Str("job_id", job.ID).Msg("Failed to update job status")
+	}
 }
 
 // Scheduler handles periodic library scans
