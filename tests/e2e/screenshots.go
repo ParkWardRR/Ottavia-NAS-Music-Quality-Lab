@@ -67,32 +67,34 @@ func main() {
 
 	// Screenshots to capture
 	screenshots := []struct {
-		name     string
-		path     string
-		width    int
-		height   int
-		darkMode bool
-		wait     time.Duration
-		fullPage bool
+		name       string
+		path       string
+		width      int
+		height     int
+		darkMode   bool
+		wait       time.Duration
+		fullPage   bool
+		showWizard bool
 	}{
-		{"dashboard-light", "/", 1920, 1080, false, 500 * time.Millisecond, false},
-		{"dashboard-dark", "/", 1920, 1080, true, 500 * time.Millisecond, false},
-		{"tracks-light", "/tracks", 1920, 1080, false, 500 * time.Millisecond, false},
-		{"tracks-dark", "/tracks", 1920, 1080, true, 500 * time.Millisecond, false},
-		{"track-detail-light", "/tracks/" + trackID, 1920, 1400, false, 500 * time.Millisecond, true},
-		{"track-detail-dark", "/tracks/" + trackID, 1920, 1400, true, 500 * time.Millisecond, true},
-		{"albums-light", "/albums", 1920, 1080, false, 500 * time.Millisecond, false},
-		{"albums-dark", "/albums", 1920, 1080, true, 500 * time.Millisecond, false},
-		{"album-detail-light", albumURL, 1920, 1400, false, 500 * time.Millisecond, true},
-		{"album-detail-dark", albumURL, 1920, 1400, true, 500 * time.Millisecond, true},
-		{"settings-light", "/settings", 1920, 1080, false, 500 * time.Millisecond, false},
-		{"settings-dark", "/settings", 1920, 1080, true, 500 * time.Millisecond, false},
-		{"conversions-light", "/conversions", 1920, 1080, false, 500 * time.Millisecond, false},
-		{"conversions-dark", "/conversions", 1920, 1080, true, 500 * time.Millisecond, false},
-		{"artwork-light", "/artwork", 1920, 1080, false, 500 * time.Millisecond, false},
-		{"artwork-dark", "/artwork", 1920, 1080, true, 500 * time.Millisecond, false},
-		{"dashboard-mobile", "/", 375, 812, false, 500 * time.Millisecond, false},
-		{"tracks-mobile", "/tracks", 375, 812, false, 500 * time.Millisecond, false},
+		{"dashboard-light", "/", 1920, 1080, false, 500 * time.Millisecond, false, false},
+		{"dashboard-dark", "/", 1920, 1080, true, 500 * time.Millisecond, false, false},
+		{"tracks-light", "/tracks", 1920, 1080, false, 500 * time.Millisecond, false, false},
+		{"tracks-dark", "/tracks", 1920, 1080, true, 500 * time.Millisecond, false, false},
+		{"track-detail-light", "/tracks/" + trackID, 1920, 1400, false, 500 * time.Millisecond, true, false},
+		{"track-detail-dark", "/tracks/" + trackID, 1920, 1400, true, 500 * time.Millisecond, true, false},
+		{"albums-light", "/albums", 1920, 1080, false, 500 * time.Millisecond, false, false},
+		{"albums-dark", "/albums", 1920, 1080, true, 500 * time.Millisecond, false, false},
+		{"album-detail-light", albumURL, 1920, 1400, false, 500 * time.Millisecond, true, false},
+		{"album-detail-dark", albumURL, 1920, 1400, true, 500 * time.Millisecond, true, false},
+		{"settings-light", "/settings", 1920, 1080, false, 500 * time.Millisecond, false, false},
+		{"settings-dark", "/settings", 1920, 1080, true, 500 * time.Millisecond, false, false},
+		{"conversions-light", "/conversions", 1920, 1080, false, 500 * time.Millisecond, false, false},
+		{"conversions-dark", "/conversions", 1920, 1080, true, 500 * time.Millisecond, false, false},
+		{"artwork-light", "/artwork", 1920, 1080, false, 500 * time.Millisecond, false, false},
+		{"artwork-dark", "/artwork", 1920, 1080, true, 500 * time.Millisecond, false, false},
+		{"wizard-welcome", "/", 1920, 1080, true, 800 * time.Millisecond, false, true},
+		{"dashboard-mobile", "/", 390, 844, false, 500 * time.Millisecond, false, false},
+		{"tracks-mobile", "/tracks", 390, 844, false, 500 * time.Millisecond, false, false},
 	}
 
 	for _, s := range screenshots {
@@ -124,7 +126,21 @@ func main() {
 			continue
 		}
 
-		// Navigate to page
+		// Set localStorage to prevent wizard auto-show BEFORE navigating (except for wizard screenshot)
+		if !s.showWizard {
+			// First navigate to base URL to set localStorage
+			_, err = page.Goto(baseURL, playwright.PageGotoOptions{
+				WaitUntil: playwright.WaitUntilStateCommit,
+			})
+			if err == nil {
+				page.Evaluate(`
+					localStorage.setItem('welcomeWizardDismissed', 'true');
+					localStorage.setItem('wizardsCompleted', JSON.stringify(['welcome']));
+				`)
+			}
+		}
+
+		// Navigate to target page
 		_, err = page.Goto(fmt.Sprintf("%s%s", baseURL, s.path), playwright.PageGotoOptions{
 			WaitUntil: playwright.WaitUntilStateNetworkidle,
 		})
@@ -144,6 +160,21 @@ func main() {
 				log.Printf("Error setting dark mode: %v", err)
 			}
 			time.Sleep(300 * time.Millisecond) // Wait for theme transition
+		}
+
+		// Handle wizard overlay
+		if s.showWizard {
+			// Show the welcome wizard - wait for Alpine first
+			time.Sleep(500 * time.Millisecond)
+			_, err = page.Evaluate(`
+				if (typeof Alpine !== 'undefined' && Alpine.store('wizard')) {
+					Alpine.store('wizard').start('welcome');
+				}
+			`)
+			if err != nil {
+				log.Printf("Error showing wizard: %v", err)
+			}
+			time.Sleep(500 * time.Millisecond) // Wait for wizard animation
 		}
 
 		// Take screenshot

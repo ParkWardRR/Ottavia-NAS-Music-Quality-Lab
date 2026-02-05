@@ -183,6 +183,12 @@ Are your "lossless" files actually lossless? Many FLAC and ALAC files in the wil
 </p>
 
 <p align="center">
+  <img src="screenshots/wizard-welcome.png" alt="Welcome Wizard" width="100%">
+  <br>
+  <em>Interactive Onboarding - Guided wizards for new users</em>
+</p>
+
+<p align="center">
   <img src="screenshots/dashboard-mobile.png" alt="Mobile" width="300">
   <img src="screenshots/tracks-mobile.png" alt="Mobile Tracks" width="300">
   <br>
