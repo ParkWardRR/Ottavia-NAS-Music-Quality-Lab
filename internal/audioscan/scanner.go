@@ -271,11 +271,12 @@ func (s *Scanner) runAudioScanModuleWithLog(ctx context.Context, track *models.T
 	logDebug("audioscan", "Quality reason", qualityReason)
 
 	// Build render hints from probe cache (computed, not hard-coded)
+	// Start at 10kHz to focus on the high-frequency range where lossy compression artifacts appear
 	renderHints := &RenderHints{
 		NyquistHz:    nyquist,
 		GuideLinesHz: curve.Guides.VerticalLinesHz,
 		FreqScaleLog: true,
-		MinFreqHz:    20,
+		MinFreqHz:    10000, // Focus on 10kHz+ where lossy cutoffs are visible
 		MaxFreqHz:    nyquist,
 		MinDb:        -80,
 		MaxDb:        0,

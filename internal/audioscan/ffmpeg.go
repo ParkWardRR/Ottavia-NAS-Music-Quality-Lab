@@ -584,12 +584,13 @@ func abs32(x float32) float32 {
 
 // extractDynamicsSeries analyzes dynamics over time
 func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, duration float64) (*DynamicsSeries, error) {
-	// Use astats with ametadata for per-frame RMS, peak, and crest factor
+	// Use astats with ametadata for per-frame RMS and peak levels
+	// Crest factor is calculated as Peak(dB) - RMS(dB) which is more reliable
 	// FFmpeg 7.x: use ametadata=mode=print:file=- to output to stdout
 	args := []string{
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "astats=metadata=1:measure_perchannel=Peak_level+RMS_level+Crest_factor:measure_overall=none:reset=1,ametadata=mode=print:file=-",
+		"-af", "astats=metadata=1:measure_perchannel=Peak_level+RMS_level:measure_overall=none:reset=1,ametadata=mode=print:file=-",
 		"-f", "null",
 		"-",
 	}
@@ -606,14 +607,15 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 	}
 
 	// Parse ametadata output for per-frame dynamics
+	// We only need Peak and RMS levels - crest factor is Peak - RMS in dB
 	framePattern := regexp.MustCompile(`frame:\d+\s+pts:\d+\s+pts_time:([\d.]+)`)
 	peakPattern := regexp.MustCompile(`lavfi\.astats\.1\.Peak_level=([-\d.inf]+)`)
 	rmsPattern := regexp.MustCompile(`lavfi\.astats\.1\.RMS_level=([-\d.inf]+)`)
-	crestPattern := regexp.MustCompile(`lavfi\.astats\.1\.Crest_factor=([-\d.inf]+)`)
 
 	lines := strings.Split(output, "\n")
 	var currentTime float32 = 0
-	var currentPeak, currentRMS, currentCrest float32 = -60, -60, 1
+	var currentPeak, currentRMS float32 = -60, -60
+	var hasPeak, hasRMS bool
 	var sumCrest float32 = 0
 	count := 0
 	lastAddedTime := float32(-1)
@@ -623,14 +625,14 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 		if m := framePattern.FindStringSubmatch(line); len(m) > 1 {
 			if t, err := strconv.ParseFloat(m[1], 32); err == nil {
 				// Add previous data point before updating time (if we have valid data)
-				if currentTime != lastAddedTime && currentCrest > 0 && currentRMS > -100 {
+				if currentTime != lastAddedTime && hasPeak && hasRMS && currentRMS > -100 {
 					series.TSec = append(series.TSec, currentTime)
 					series.PeakDb = append(series.PeakDb, currentPeak)
 					series.RMSDb = append(series.RMSDb, currentRMS)
 
-					// Convert crest factor to dB
-					crestDb := float32(20 * math.Log10(float64(currentCrest)))
-					if math.IsInf(float64(crestDb), 0) || math.IsNaN(float64(crestDb)) {
+					// Crest factor in dB = Peak(dB) - RMS(dB)
+					crestDb := currentPeak - currentRMS
+					if crestDb < 0 {
 						crestDb = 0
 					}
 					series.CrestFactorDb = append(series.CrestFactorDb, crestDb)
@@ -643,6 +645,8 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 					lastAddedTime = currentTime
 				}
 				currentTime = float32(t)
+				hasPeak = false
+				hasRMS = false
 			}
 		}
 
@@ -651,6 +655,7 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 			if m[1] != "-inf" && m[1] != "inf" {
 				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 					currentPeak = float32(v)
+					hasPeak = true
 				}
 			}
 		}
@@ -660,31 +665,24 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 			if m[1] != "-inf" && m[1] != "inf" {
 				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 					currentRMS = float32(v)
-				}
-			}
-		}
-
-		// Extract crest factor
-		if m := crestPattern.FindStringSubmatch(line); len(m) > 1 {
-			if m[1] != "-inf" && m[1] != "inf" {
-				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
-					currentCrest = float32(v)
+					hasRMS = true
 				}
 			}
 		}
 	}
 
 	// Add final data point
-	if currentTime != lastAddedTime && currentCrest > 0 && currentRMS > -100 {
+	if currentTime != lastAddedTime && hasPeak && hasRMS && currentRMS > -100 {
 		series.TSec = append(series.TSec, currentTime)
 		series.PeakDb = append(series.PeakDb, currentPeak)
 		series.RMSDb = append(series.RMSDb, currentRMS)
-		crestDb := float32(20 * math.Log10(float64(currentCrest)))
-		if !math.IsInf(float64(crestDb), 0) && !math.IsNaN(float64(crestDb)) {
-			series.CrestFactorDb = append(series.CrestFactorDb, crestDb)
-			sumCrest += crestDb
-			count++
+		crestDb := currentPeak - currentRMS
+		if crestDb < 0 {
+			crestDb = 0
 		}
+		series.CrestFactorDb = append(series.CrestFactorDb, crestDb)
+		sumCrest += crestDb
+		count++
 	}
 
 	if count > 0 {
