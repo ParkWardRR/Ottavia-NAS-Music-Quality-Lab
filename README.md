@@ -57,7 +57,8 @@ Are your "lossless" files actually lossless? Many FLAC and ALAC files in the wil
 ### Lossless Authenticity Verification
 - Detects spectral cutoffs and rolloff characteristics typical of lossy transcodes
 - Provides confidence scores (0-100%) with plain-English explanations
-- Visual "Verified Lossless" or "Possibly Transcoded" badges
+- Visual "Verified Lossless" or "Possibly Transcoded" badges for lossless formats
+- Smart format detection: lossy formats (MP3, AAC, OGG) show "Lossy" instead of authenticity warnings
 - Export analysis evidence as JSON for further review
 
 ### Dynamic Range (DR) Analysis
@@ -549,9 +550,10 @@ Ottavia's audio scan feature provides comprehensive analysis through five specia
 ### Spectrum Analysis
 Performs FFT-based frequency spectrum analysis to detect:
 - **Bandwidth**: Actual frequency content vs. expected Nyquist limit
-- **DC Offset**: Low-frequency bias that can cause clipping
-- **Lossy Artifacts**: Spectral rolloff patterns typical of MP3/AAC transcodes
+- **High-Frequency Focus**: Chart displays 10kHz+ range where lossy cutoffs are visible
+- **Lossy Artifacts**: Sharp cutoff around 16-18kHz indicates MP3/AAC transcode
 - **Quality Classification**: Hi-Res (>48kHz), Studio (96kHz+), CD (44.1kHz), Lossy
+- **Visual Guide**: "Look for" descriptions help interpret analysis results
 
 ### Loudness Analysis
 Implements EBU R128 loudness measurement:
@@ -578,9 +580,10 @@ Analyzes stereo field characteristics:
 ### Dynamics Analysis
 Measures dynamic range and compression:
 - **DR Score**: Industry-standard dynamic range measurement
-- **Crest Factor**: Peak-to-RMS ratio per segment
-- **Per-Section Analysis**: Identifies "crushed" sections
+- **Crest Factor**: Peak(dB) - RMS(dB) calculated per segment for accuracy
+- **Per-Section Analysis**: Identifies "crushed" sections with low dynamics
 - **Visual Scale**: Crushed → Limited → Moderate → Good → Excellent
+- **Interpretation Guide**: Large Peak-RMS gap indicates good dynamics; small gap means compressed
 
 ---
 

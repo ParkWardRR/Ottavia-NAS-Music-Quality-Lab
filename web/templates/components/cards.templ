@@ -2,8 +2,19 @@ package components
 
 import (
 	"fmt"
+	"strings"
 	"github.com/ottavia-music/ottavia/internal/models"
 )
+
+// isLosslessFormat returns true for lossless audio codecs
+func isLosslessFormat(codec string) bool {
+	switch strings.ToLower(codec) {
+	case "flac", "alac", "wav", "aiff", "ape", "wv", "wavpack", "tta", "dsd", "dsf", "dff":
+		return true
+	default:
+		return false
+	}
+}
 
 templ StatCard(title string, value string, subtitle string, icon templ.Component, trend string, color string) {
 	<div class="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm border border-gray-200/50 dark:border-gray-800/50 hover:shadow-md hover:border-gray-300/50 dark:hover:border-gray-700/50 transition-all duration-300 group">
@@ -216,10 +227,14 @@ templ TrackRow(track models.Track, analysis *models.AnalysisResult) {
 			<span class="text-gray-600 dark:text-gray-300">{ formatDuration(track.Duration) }</span>
 		</td>
 		<td class="px-6 py-4 whitespace-nowrap">
-			if analysis != nil {
-				@LosslessIndicator(analysis.LosslessStatus, analysis.LosslessScore)
+			if isLosslessFormat(track.Codec) {
+				if analysis != nil {
+					@LosslessIndicator(analysis.LosslessStatus, analysis.LosslessScore)
+				} else {
+					<span class="text-gray-400">Pending</span>
+				}
 			} else {
-				<span class="text-gray-400">-</span>
+				<span class="text-sm text-gray-500 dark:text-gray-400">Lossy</span>
 			}
 		</td>
 		<td class="px-6 py-4 whitespace-nowrap text-right">

@@ -5,11 +5,141 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/rs/zerolog/log"
 )
+
+// Retry configuration for unstable NAS connections
+const (
+	maxRetries     = 5
+	initialBackoff = 1 * time.Second
+	maxBackoff     = 16 * time.Second
+)
+
+// isRetryableError checks if an error indicates a temporary file access issue
+// that should be retried (e.g., NAS temporarily unavailable)
+func isRetryableError(stderr string, err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for common NAS/network filesystem errors
+	retryablePatterns := []string{
+		"No such file or directory",
+		"Input/output error",
+		"Stale file handle",
+		"Resource temporarily unavailable",
+		"Connection timed out",
+		"Transport endpoint is not connected",
+		"Network is unreachable",
+		"Permission denied", // Sometimes transient on NFS
+	}
+	for _, pattern := range retryablePatterns {
+		if strings.Contains(stderr, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkFileAccessible verifies file exists before running FFmpeg
+// Returns nil if accessible, error otherwise
+func checkFileAccessible(path string) error {
+	_, err := os.Stat(path)
+	return err
+}
+
+// runFFmpegWithRetry executes an FFmpeg command with retry logic for NAS instability
+func runFFmpegWithRetry(ctx context.Context, ffmpegPath string, args []string, captureStdout bool) (stdout, stderr string, err error) {
+	var stdoutBuf, stderrBuf bytes.Buffer
+	backoff := initialBackoff
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Check if file is accessible before trying FFmpeg
+		// The input file is typically the second argument after "-i"
+		for i, arg := range args {
+			if arg == "-i" && i+1 < len(args) {
+				if fileErr := checkFileAccessible(args[i+1]); fileErr != nil {
+					if attempt < maxRetries {
+						log.Warn().
+							Str("path", args[i+1]).
+							Int("attempt", attempt+1).
+							Dur("backoff", backoff).
+							Msg("File not accessible, waiting for NAS...")
+						select {
+						case <-ctx.Done():
+							return "", "", ctx.Err()
+						case <-time.After(backoff):
+						}
+						backoff *= 2
+						if backoff > maxBackoff {
+							backoff = maxBackoff
+						}
+						continue
+					}
+					return "", "", fmt.Errorf("file not accessible after %d retries: %w", maxRetries, fileErr)
+				}
+				break
+			}
+		}
+
+		stdoutBuf.Reset()
+		stderrBuf.Reset()
+
+		cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+		if captureStdout {
+			cmd.Stdout = &stdoutBuf
+		}
+		cmd.Stderr = &stderrBuf
+
+		err = cmd.Run()
+		stdout = stdoutBuf.String()
+		stderr = stderrBuf.String()
+
+		if err == nil {
+			return stdout, stderr, nil
+		}
+
+		// Check if this is a retryable error
+		if isRetryableError(stderr, err) && attempt < maxRetries {
+			log.Warn().
+				Err(err).
+				Int("attempt", attempt+1).
+				Dur("backoff", backoff).
+				Str("stderr", truncateString(stderr, 200)).
+				Msg("FFmpeg failed with retryable error, retrying...")
+
+			select {
+			case <-ctx.Done():
+				return stdout, stderr, ctx.Err()
+			case <-time.After(backoff):
+			}
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+
+		// Non-retryable error or max retries reached
+		break
+	}
+
+	return stdout, stderr, err
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
 
 // extractSpectrumCurve uses FFmpeg to extract frequency spectrum data
 func (s *Scanner) extractSpectrumCurve(ctx context.Context, path string, fftSize int, duration float64) ([]float32, []float32, error) {
@@ -25,12 +155,10 @@ func (s *Scanner) extractSpectrumCurve(ctx context.Context, path string, fftSize
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		// If showfreqs isn't available, fall back to generating synthetic data from astats
+	// Use retry logic for unstable NAS connections
+	_, _, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, false)
+	if err != nil {
+		// If showfreqs isn't available or fails, fall back to generating synthetic data from astats
 		return s.extractSpectrumFromStats(ctx, path, fftSize, duration)
 	}
 
@@ -50,10 +178,8 @@ func (s *Scanner) extractSpectrumFromStats(ctx context.Context, path string, fft
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Run() // Ignore error, we'll parse what we can
+	// Use retry logic for unstable NAS connections (ignore errors, we'll generate synthetic data)
+	runFFmpegWithRetry(ctx, s.ffmpegPath, args, false)
 
 	// For now, generate a synthetic spectrum curve based on the track's sample rate
 	// In production, this would parse actual FFT data from the audio
@@ -94,12 +220,8 @@ func (s *Scanner) calculateDC(ctx context.Context, path string, duration float64
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Run()
-
-	output := stderr.String()
+	// Use retry logic for unstable NAS connections
+	_, output, _ := runFFmpegWithRetry(ctx, s.ffmpegPath, args, false)
 
 	// Parse DC offset from astats output
 	dcPattern := regexp.MustCompile(`DC offset:\s*([-\d.]+)`)
@@ -126,15 +248,11 @@ func (s *Scanner) extractLoudnessSeries(ctx context.Context, path string, durati
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
+	// Use retry logic for unstable NAS connections
+	_, output, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, false)
+	if err != nil {
 		return nil, fmt.Errorf("ebur128 analysis failed: %w", err)
 	}
-
-	output := stderr.String()
 
 	series := &LoudnessSeries{
 		Version:   RawDataVersion,
@@ -236,22 +354,20 @@ func (s *Scanner) extractLoudnessSeries(ctx context.Context, path string, durati
 // extractClippingSeries detects clipping over time
 func (s *Scanner) extractClippingSeries(ctx context.Context, path string, duration float64) (*ClippingSeries, error) {
 	// Use astats with ametadata to get per-frame peak levels
-	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
+	// FFmpeg 7.x: use ametadata=mode=print:file=- to output to stdout (cleaner parsing)
 	args := []string{
-		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "astats=metadata=1:measure_perchannel=Peak_level:measure_overall=none,ametadata=print",
+		"-af", "astats=metadata=1:measure_perchannel=Peak_level:measure_overall=none:reset=1,ametadata=mode=print:file=-",
 		"-f", "null",
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Run()
-
-	output := stderr.String()
+	// Use retry logic for unstable NAS connections (captures stdout for ametadata output)
+	output, _, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, true)
+	if err != nil {
+		return nil, fmt.Errorf("clipping analysis failed: %w", err)
+	}
 
 	series := &ClippingSeries{
 		Version:       RawDataVersion,
@@ -259,20 +375,45 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 	}
 
 	// Parse ametadata output for per-frame peak levels
-	// Format: lavfi.astats.1.Peak_level=-18.063656
-	framePattern := regexp.MustCompile(`frame:\d+\s+pts:\d+\s+pts_time:([\d.]+)`)
+	// FFmpeg 7.x format (to stdout):
+	// frame:0    pts:0       pts_time:0
+	// lavfi.astats.1.Peak_level=-18.063656
+	// lavfi.astats.2.Peak_level=-22.345678
+	framePattern := regexp.MustCompile(`frame:\s*\d+\s+pts:\s*\d+\s+pts_time:\s*([\d.]+)`)
 	peakPattern := regexp.MustCompile(`lavfi\.astats\.\d+\.Peak_level=([-\d.inf]+)`)
 
 	lines := strings.Split(output, "\n")
 	var currentTime float32 = 0
 	var maxPeak float32 = -100
+	var frameHasPeak bool = false
+	var framePeak float32 = -100
 
 	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
 		// Extract timestamp from frame line
 		if m := framePattern.FindStringSubmatch(line); len(m) > 1 {
+			// Save previous frame's data before moving to next
+			if frameHasPeak && (len(series.TSec) == 0 || currentTime-series.TSec[len(series.TSec)-1] >= 0.02) {
+				series.TSec = append(series.TSec, currentTime)
+				clipped := 0
+				if framePeak >= float32(series.ThresholdDbFS) {
+					clipped = 1
+					series.TotalClipped++
+				}
+				series.ClippedSamples = append(series.ClippedSamples, clipped)
+				series.OversCount = append(series.OversCount, 0)
+				if framePeak > maxPeak {
+					maxPeak = framePeak
+				}
+			}
+
+			// Start new frame
 			if t, err := strconv.ParseFloat(m[1], 32); err == nil {
 				currentTime = float32(t)
 			}
+			frameHasPeak = false
+			framePeak = -100
 		}
 
 		// Extract peak level
@@ -282,25 +423,24 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 			}
 			if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 				peak := float32(v)
-				if peak > maxPeak {
-					maxPeak = peak
-				}
-
-				// Only add data point if we have enough time spacing (avoid duplicates)
-				if len(series.TSec) == 0 || currentTime-series.TSec[len(series.TSec)-1] >= 0.02 {
-					series.TSec = append(series.TSec, currentTime)
-
-					// Count as clipped if peak >= threshold
-					clipped := 0
-					if peak >= float32(series.ThresholdDbFS) {
-						clipped = 1
-						series.TotalClipped++
-					}
-					series.ClippedSamples = append(series.ClippedSamples, clipped)
-					series.OversCount = append(series.OversCount, 0)
+				frameHasPeak = true
+				if peak > framePeak {
+					framePeak = peak
 				}
 			}
 		}
+	}
+
+	// Save last frame
+	if frameHasPeak && (len(series.TSec) == 0 || currentTime-series.TSec[len(series.TSec)-1] >= 0.02) {
+		series.TSec = append(series.TSec, currentTime)
+		clipped := 0
+		if framePeak >= float32(series.ThresholdDbFS) {
+			clipped = 1
+			series.TotalClipped++
+		}
+		series.ClippedSamples = append(series.ClippedSamples, clipped)
+		series.OversCount = append(series.OversCount, 0)
 	}
 
 	// Find worst section
@@ -319,22 +459,20 @@ func (s *Scanner) extractClippingSeries(ctx context.Context, path string, durati
 func (s *Scanner) extractPhaseSeries(ctx context.Context, path string, duration float64) (*PhaseSeries, error) {
 	// Use aphasemeter for actual phase correlation measurement
 	// Combined with astats for L/R balance calculation
-	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
+	// FFmpeg 7.x: use ametadata=mode=print:file=- to output to stdout
 	args := []string{
-		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "aphasemeter=video=0,astats=metadata=1:measure_perchannel=RMS_level:measure_overall=none,ametadata=print",
+		"-af", "aphasemeter=video=0,astats=metadata=1:measure_perchannel=RMS_level:measure_overall=none:reset=1,ametadata=mode=print:file=-",
 		"-f", "null",
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Run()
-
-	output := stderr.String()
+	// Use retry logic for unstable NAS connections (captures stdout for ametadata output)
+	output, _, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, true)
+	if err != nil {
+		return nil, fmt.Errorf("phase analysis failed: %w", err)
+	}
 
 	series := &PhaseSeries{
 		Version:        RawDataVersion,
@@ -446,23 +584,22 @@ func abs32(x float32) float32 {
 
 // extractDynamicsSeries analyzes dynamics over time
 func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, duration float64) (*DynamicsSeries, error) {
-	// Use astats with ametadata for per-frame RMS, peak, and crest factor
-	// FFmpeg 7.x requires ametadata=print to output per-frame metadata
+	// Use astats with ametadata for per-frame RMS and peak levels
+	// Crest factor is calculated as Peak(dB) - RMS(dB) which is more reliable
+	// FFmpeg 7.x: use ametadata=mode=print:file=- to output to stdout
 	args := []string{
-		"-loglevel", "verbose",
 		"-i", path,
 		"-t", fmt.Sprintf("%.2f", duration),
-		"-af", "astats=metadata=1:measure_perchannel=Peak_level+RMS_level+Crest_factor:measure_overall=none,ametadata=print",
+		"-af", "astats=metadata=1:measure_perchannel=Peak_level+RMS_level:measure_overall=none:reset=1,ametadata=mode=print:file=-",
 		"-f", "null",
 		"-",
 	}
 
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Run()
-
-	output := stderr.String()
+	// Use retry logic for unstable NAS connections (captures stdout for ametadata output)
+	output, _, err := runFFmpegWithRetry(ctx, s.ffmpegPath, args, true)
+	if err != nil {
+		return nil, fmt.Errorf("dynamics analysis failed: %w", err)
+	}
 
 	series := &DynamicsSeries{
 		Version:    RawDataVersion,
@@ -470,14 +607,15 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 	}
 
 	// Parse ametadata output for per-frame dynamics
+	// We only need Peak and RMS levels - crest factor is Peak - RMS in dB
 	framePattern := regexp.MustCompile(`frame:\d+\s+pts:\d+\s+pts_time:([\d.]+)`)
 	peakPattern := regexp.MustCompile(`lavfi\.astats\.1\.Peak_level=([-\d.inf]+)`)
 	rmsPattern := regexp.MustCompile(`lavfi\.astats\.1\.RMS_level=([-\d.inf]+)`)
-	crestPattern := regexp.MustCompile(`lavfi\.astats\.1\.Crest_factor=([-\d.inf]+)`)
 
 	lines := strings.Split(output, "\n")
 	var currentTime float32 = 0
-	var currentPeak, currentRMS, currentCrest float32 = -60, -60, 1
+	var currentPeak, currentRMS float32 = -60, -60
+	var hasPeak, hasRMS bool
 	var sumCrest float32 = 0
 	count := 0
 	lastAddedTime := float32(-1)
@@ -487,14 +625,14 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 		if m := framePattern.FindStringSubmatch(line); len(m) > 1 {
 			if t, err := strconv.ParseFloat(m[1], 32); err == nil {
 				// Add previous data point before updating time (if we have valid data)
-				if currentTime != lastAddedTime && currentCrest > 0 && currentRMS > -100 {
+				if currentTime != lastAddedTime && hasPeak && hasRMS && currentRMS > -100 {
 					series.TSec = append(series.TSec, currentTime)
 					series.PeakDb = append(series.PeakDb, currentPeak)
 					series.RMSDb = append(series.RMSDb, currentRMS)
 
-					// Convert crest factor to dB
-					crestDb := float32(20 * math.Log10(float64(currentCrest)))
-					if math.IsInf(float64(crestDb), 0) || math.IsNaN(float64(crestDb)) {
+					// Crest factor in dB = Peak(dB) - RMS(dB)
+					crestDb := currentPeak - currentRMS
+					if crestDb < 0 {
 						crestDb = 0
 					}
 					series.CrestFactorDb = append(series.CrestFactorDb, crestDb)
@@ -507,6 +645,8 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 					lastAddedTime = currentTime
 				}
 				currentTime = float32(t)
+				hasPeak = false
+				hasRMS = false
 			}
 		}
 
@@ -515,6 +655,7 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 			if m[1] != "-inf" && m[1] != "inf" {
 				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 					currentPeak = float32(v)
+					hasPeak = true
 				}
 			}
 		}
@@ -524,31 +665,24 @@ func (s *Scanner) extractDynamicsSeries(ctx context.Context, path string, durati
 			if m[1] != "-inf" && m[1] != "inf" {
 				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
 					currentRMS = float32(v)
-				}
-			}
-		}
-
-		// Extract crest factor
-		if m := crestPattern.FindStringSubmatch(line); len(m) > 1 {
-			if m[1] != "-inf" && m[1] != "inf" {
-				if v, err := strconv.ParseFloat(m[1], 32); err == nil {
-					currentCrest = float32(v)
+					hasRMS = true
 				}
 			}
 		}
 	}
 
 	// Add final data point
-	if currentTime != lastAddedTime && currentCrest > 0 && currentRMS > -100 {
+	if currentTime != lastAddedTime && hasPeak && hasRMS && currentRMS > -100 {
 		series.TSec = append(series.TSec, currentTime)
 		series.PeakDb = append(series.PeakDb, currentPeak)
 		series.RMSDb = append(series.RMSDb, currentRMS)
-		crestDb := float32(20 * math.Log10(float64(currentCrest)))
-		if !math.IsInf(float64(crestDb), 0) && !math.IsNaN(float64(crestDb)) {
-			series.CrestFactorDb = append(series.CrestFactorDb, crestDb)
-			sumCrest += crestDb
-			count++
+		crestDb := currentPeak - currentRMS
+		if crestDb < 0 {
+			crestDb = 0
 		}
+		series.CrestFactorDb = append(series.CrestFactorDb, crestDb)
+		sumCrest += crestDb
+		count++
 	}
 
 	if count > 0 {

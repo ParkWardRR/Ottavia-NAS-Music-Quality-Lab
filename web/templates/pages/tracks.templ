@@ -176,7 +176,9 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 						<div class="mt-6 pt-6 border-t border-gray-200/50 dark:border-gray-800/50">
 							<h3 class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Quality Summary</h3>
 							<div class="flex flex-wrap gap-2">
-								@TrackQualityBadge("Authenticity", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
+								if isLosslessFormat(track.Codec) {
+									@TrackQualityBadge("Authenticity", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
+								}
 								@TrackQualityBadge("Integrity", getIntegrityStatus(analysis), getIntegrityShortLabel(analysis))
 								@TrackQualityBadge("Dynamics", getDRStatus(analysis), fmt.Sprintf("DR%d", calculateDR(analysis)))
 								@TrackQualityBadge("Clipping", getClippingStatus(analysis), getClippingShortLabel(analysis))
@@ -186,39 +188,41 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 				</div>
 
 				if analysis != nil {
-					<!-- Lossless Authenticity Analysis -->
-					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
-						<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
-							<div class="flex items-center gap-3">
-								@StatusIcon(analysis.LosslessStatus)
-								<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Lossless Authenticity</h2>
-							</div>
-							@TrackQualityBadge("", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
-						</div>
-						<div class="p-6">
-							<p class={ fmt.Sprintf("text-sm mb-4 %s", getLosslessTextColor(analysis.LosslessStatus)) }>
-								{ getLosslessExplanation(analysis, track) }
-							</p>
-							<div class="grid grid-cols-2 gap-4">
-								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">High Freq Cutoff</p>
-									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">
-										if analysis.HighFreqCutoff > 0 {
-											{ fmt.Sprintf("%.1f kHz", analysis.HighFreqCutoff/1000) }
-										} else {
-											N/A
-										}
-									</p>
-									<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Expected: { fmt.Sprintf("%.1f kHz", float64(track.SampleRate)/2000) }</p>
+					if isLosslessFormat(track.Codec) {
+						<!-- Lossless Authenticity Analysis - only shown for lossless formats -->
+						<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
+							<div class="px-6 py-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
+								<div class="flex items-center gap-3">
+									@StatusIcon(analysis.LosslessStatus)
+									<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Lossless Authenticity</h2>
 								</div>
-								<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-									<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Confidence Score</p>
-									<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.0f%%", analysis.LosslessScore) }</p>
-									<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{ getConfidenceText(analysis.LosslessScore) }</p>
+								@TrackQualityBadge("", analysis.LosslessStatus, getLosslessShortLabel(analysis.LosslessStatus))
+							</div>
+							<div class="p-6">
+								<p class={ fmt.Sprintf("text-sm mb-4 %s", getLosslessTextColor(analysis.LosslessStatus)) }>
+									{ getLosslessExplanation(analysis, track) }
+								</p>
+								<div class="grid grid-cols-2 gap-4">
+									<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+										<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">High Freq Cutoff</p>
+										<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">
+											if analysis.HighFreqCutoff > 0 {
+												{ fmt.Sprintf("%.1f kHz", analysis.HighFreqCutoff/1000) }
+											} else {
+												N/A
+											}
+										</p>
+										<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Expected: { fmt.Sprintf("%.1f kHz", float64(track.SampleRate)/2000) }</p>
+									</div>
+									<div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+										<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Confidence Score</p>
+										<p class="text-xl font-bold text-gray-900 dark:text-white mt-1">{ fmt.Sprintf("%.0f%%", analysis.LosslessScore) }</p>
+										<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{ getConfidenceText(analysis.LosslessScore) }</p>
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
+					}
 
 					<!-- Dynamic Range (Loudness War) Analysis -->
 					<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800/50 overflow-hidden">
@@ -397,7 +401,11 @@ templ TrackDetail(track *models.Track, analysis *models.AnalysisResult, artifact
 							<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Quick Assessment</h2>
 						</div>
 						<div class="p-6 space-y-3">
-							@AssessmentRow("Lossless", analysis.LosslessStatus == "pass")
+							if isLosslessFormat(track.Codec) {
+								@AssessmentRow("Authentic Lossless", analysis.LosslessStatus == "pass")
+							} else {
+								@AssessmentRow("Lossy Format", true)
+							}
 							@AssessmentRow("No Clipping", analysis.ClippedSamples == 0)
 							@AssessmentRow("Good Dynamics", calculateDR(analysis) >= 10)
 							@AssessmentRow("File Integrity", analysis.IntegrityOK)
@@ -857,6 +865,16 @@ func minInt(a, b int) int {
 	return b
 }
 
+// isLosslessFormat returns true for lossless audio codecs where authenticity checking makes sense
+func isLosslessFormat(codec string) bool {
+	switch strings.ToLower(codec) {
+	case "flac", "alac", "wav", "aiff", "ape", "wv", "wavpack", "tta", "dsd", "dsf", "dff":
+		return true
+	default:
+		return false
+	}
+}
+
 func getArtifactPrefix(trackID string) string {
 	if len(trackID) >= 2 {
 		return trackID[:2]
@@ -865,7 +883,7 @@ func getArtifactPrefix(trackID string) string {
 }
 
 // DynamicChartPanel renders a single dynamic chart panel with Canvas-based rendering
-templ DynamicChartPanel(trackID, module, title, icon, bgClass, iconClass, badgeClass string) {
+templ DynamicChartPanel(trackID, module, title, icon, bgClass, iconClass, badgeClass, description string) {
 	<div
 		x-data={ fmt.Sprintf(`OttaviaCharts.chartComponent()`) }
 		data-module={ module }
@@ -902,6 +920,11 @@ templ DynamicChartPanel(trackID, module, title, icon, bgClass, iconClass, badgeC
 				</button>
 			</div>
 		</div>
+		if description != "" {
+			<div class="px-6 py-3 bg-gray-50 dark:bg-gray-800/30 border-b border-gray-200/50 dark:border-gray-800/50">
+				<p class="text-sm text-gray-600 dark:text-gray-400">{ description }</p>
+			</div>
+		}
 		<div class="p-6">
 			<!-- Loading skeleton -->
 			<template x-if="loading">
@@ -972,11 +995,12 @@ templ AudioScanPanels(trackID string) {
 			<div class="space-y-6">
 				<!-- Audio Scan Spectrum Panel -->
 				<template x-if="manifest.modules && manifest.modules.audioscan && manifest.modules.audioscan.status === 'ok'">
-					@DynamicChartPanel(trackID, "audioscan", "Audio Scan-style Spectrum",
+					@DynamicChartPanel(trackID, "audioscan", "High-Frequency Spectrum",
 						`<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>`,
 						"bg-purple-100 dark:bg-purple-500/20",
 						"text-purple-600 dark:text-purple-400",
-						"bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400")
+						"bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400",
+						"Look for: Sharp cutoff around 16-18kHz indicates lossy source (MP3/AAC). Lossless audio should extend smoothly to Nyquist (half sample rate). A steep 'brick wall' rolloff is the telltale sign of lossy compression.")
 				</template>
 
 				<!-- Loudness Panel -->
@@ -985,7 +1009,8 @@ templ AudioScanPanels(trackID string) {
 						`<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>`,
 						"bg-blue-100 dark:bg-blue-500/20",
 						"text-blue-600 dark:text-blue-400",
-						"bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400")
+						"bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400",
+						"Look for: Consistent loudness without excessive peaks. True Peak above 0 dBTP indicates inter-sample clipping. Large variations between momentary (M) and short-term (S) suggest good dynamics.")
 				</template>
 
 				<!-- Clipping Panel -->
@@ -994,7 +1019,8 @@ templ AudioScanPanels(trackID string) {
 						`<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>`,
 						"bg-red-100 dark:bg-red-500/20",
 						"text-red-600 dark:text-red-400",
-						"bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400")
+						"bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400",
+						"Look for: Spikes indicate samples at or near 0 dBFS (digital maximum). Frequent clipping causes audible distortion. Ideal tracks show zero or minimal clipping throughout.")
 				</template>
 
 				<!-- Phase Correlation Panel -->
@@ -1003,7 +1029,8 @@ templ AudioScanPanels(trackID string) {
 						`<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>`,
 						"bg-teal-100 dark:bg-teal-500/20",
 						"text-teal-600 dark:text-teal-400",
-						"bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-400")
+						"bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-400",
+						"Look for: +1 = mono-compatible (L and R in phase). 0 = uncorrelated stereo. Negative values indicate phase issues that may cause cancellation when summed to mono. Brief dips are normal; persistent negatives suggest problems.")
 				</template>
 
 				<!-- Dynamics Panel -->
@@ -1012,7 +1039,8 @@ templ AudioScanPanels(trackID string) {
 						`<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>`,
 						"bg-orange-100 dark:bg-orange-500/20",
 						"text-orange-600 dark:text-orange-400",
-						"bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400")
+						"bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400",
+						"Look for: Large gap between Peak and RMS indicates good dynamics. Crest factor (Peak-RMS) above 10dB is excellent. When Peak and RMS lines are close together, the track is heavily compressed ('brickwalled').")
 				</template>
 
 				<!-- Phase Skipped Notice -->
